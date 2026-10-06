@@ -32,6 +32,20 @@ android {
         }
     }
 
+    // kudcrafts: release signing from the environment (CI decodes the keystore from GitHub secrets).
+    // Without KC_KEYSTORE_FILE the release build stays unsigned, exactly like upstream.
+    signingConfigs {
+        kudcrafts {
+            def keystoreFile = System.getenv("KC_KEYSTORE_FILE")
+            if (keystoreFile) {
+                storeFile file(keystoreFile)
+                storePassword System.getenv("KC_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("KC_KEY_ALIAS")
+                keyPassword System.getenv("KC_KEY_PASSWORD") ?: System.getenv("KC_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
@@ -40,6 +54,9 @@ android {
             // DEV/TEST ONLY: Uncomment this to test the release build with a debug key.
             //                This is required to test against the production Firebase config.
             // signingConfig signingConfigs.debug
+            if (System.getenv("KC_KEYSTORE_FILE")) {
+                signingConfig signingConfigs.kudcrafts
+            }
         }
         debug {
             minifyEnabled false
@@ -58,10 +75,25 @@ android {
             buildConfigField 'boolean', 'PAYMENT_LINKS_AVAILABLE', 'false' // Google Play Payments Policy, see #1463
         }
         fdroid {
+            // kudcrafts: our fork ships as this flavor, installed beside Play-store ntfy (spec section 7.7).
+            // Version = <upstream>-kc.<n>, code = upstream code x 100 + n. CI passes both from the release tag.
+            // app_name / app_base_url are overridden in src/fdroid/res/values/kudcrafts.xml.
+            applicationId "com.kudcrafts.ntfy"
+            versionName System.getenv("KC_VERSION_NAME") ?: "1.25.2-kc.1"
+            versionCode((System.getenv("KC_VERSION_CODE") ?: "6301") as int)
             buildConfigField 'boolean', 'FIREBASE_AVAILABLE', 'false'
             buildConfigField 'boolean', 'RATE_APP_AVAILABLE', 'false'
             buildConfigField 'boolean', 'PAYMENT_LINKS_AVAILABLE', 'true'
         }
+    }
+
+    testOptions {
+        unitTests.returnDefaultValues = true // kudcrafts: plain JVM tests for the catalog logic
+    }
+
+    // Room schemas are the input to the 18 -> 19 migration test
+    sourceSets {
+        androidTest.assets.srcDirs += files("$projectDir/schemas".toString())
     }
 
     compileOptions {
@@ -146,4 +178,10 @@ dependencies {
     // Used by Markdown library, R8 complains if these are not here
     implementation "pl.droidsonroids.gif:android-gif-drawable:1.2.31"
     implementation "com.caverock:androidsvg:1.4"
+
+    // kudcrafts: tests for the catalog sync (unit) and the Room migration (instrumented)
+    testImplementation "junit:junit:4.13.2"
+    androidTestImplementation "androidx.test.ext:junit:1.2.1"
+    androidTestImplementation "androidx.test:runner:1.6.2"
+    androidTestImplementation "androidx.room:room-testing:$room_version"
 }

@@ -44,9 +44,17 @@ data class Subscription(
     @ColumnInfo(name = "upConnectorToken") val upConnectorToken: String?, // UnifiedPush connector token
     @ColumnInfo(name = "displayName") val displayName: String?,
     @ColumnInfo(name = "dedicatedChannels") val dedicatedChannels: Boolean,
+    // kudcrafts: catalog. Set by CatalogSync from GET /v1/catalog; managed = created (and removable) by the catalog
+    @ColumnInfo(name = "managed") val managed: Boolean = false,
+    @ColumnInfo(name = "catalogApp") val catalogApp: String? = null, // App id, e.g. "facemap"
+    @ColumnInfo(name = "catalogAppName") val catalogAppName: String? = null, // App display name
+    @ColumnInfo(name = "catalogIcon") val catalogIcon: String? = null, // https URL of the app icon ("" = none)
+    @ColumnInfo(name = "catalogSound") val catalogSound: String? = null, // Resolved sound class: silent|default|alert|urgent
+    @ColumnInfo(name = "catalogName") val catalogName: String? = null, // Topic name from the catalog ("" = none)
     @Ignore val totalCount: Int = 0, // Total notifications
     @Ignore val newCount: Int = 0, // New notifications
     @Ignore val lastActive: Long = 0, // Unix timestamp
+    @Ignore val lastMessage: String? = null, // kudcrafts: title (or body) of the newest notification, for the list subtitle
     @Ignore val connectionDetails: ConnectionDetails = ConnectionDetails()
 ) {
     constructor(
@@ -63,7 +71,13 @@ data class Subscription(
         upAppId: String,
         upConnectorToken: String,
         displayName: String?,
-        dedicatedChannels: Boolean
+        dedicatedChannels: Boolean,
+        managed: Boolean,
+        catalogApp: String?,
+        catalogAppName: String?,
+        catalogIcon: String?,
+        catalogSound: String?,
+        catalogName: String?
     ) :
             this(
                 id,
@@ -80,6 +94,12 @@ data class Subscription(
                 upConnectorToken,
                 displayName,
                 dedicatedChannels,
+                managed,
+                catalogApp,
+                catalogAppName,
+                catalogIcon,
+                catalogSound,
+                catalogName,
                 totalCount = 0,
                 newCount = 0,
                 lastActive = 0,
@@ -137,6 +157,13 @@ data class SubscriptionWithMetadata(
     val upConnectorToken: String?,
     val displayName: String?,
     val dedicatedChannels: Boolean,
+    val managed: Boolean,
+    val catalogApp: String?,
+    val catalogAppName: String?,
+    val catalogIcon: String?,
+    val catalogSound: String?,
+    val catalogName: String?,
+    val lastMessage: String?,
     val totalCount: Int,
     val newCount: Int,
     val lastActive: Long
@@ -299,7 +326,7 @@ data class LogEntry(
 }
 
 @androidx.room.Database(
-    version = 18,
+    version = 19,
     entities = [
         Subscription::class,
         Notification::class,
@@ -345,6 +372,7 @@ abstract class Database : RoomDatabase() {
                     .addMigrations(MIGRATION_15_16)
                     .addMigrations(MIGRATION_16_17)
                     .addMigrations(MIGRATION_17_18)
+                    .addMigrations(MIGRATION_18_19)
                     .fallbackToDestructiveMigration(true)
                     .build()
                 this.instance = instance
@@ -485,6 +513,18 @@ abstract class Database : RoomDatabase() {
                 db.execSQL("UPDATE Notification SET sequenceId = id WHERE sequenceId = ''")
             }
         }
+
+        // kudcrafts: catalog. Additive only, so an older build of this fork can still be reinstalled over it
+        val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE Subscription ADD COLUMN managed INTEGER NOT NULL DEFAULT (0)")
+                db.execSQL("ALTER TABLE Subscription ADD COLUMN catalogApp TEXT")
+                db.execSQL("ALTER TABLE Subscription ADD COLUMN catalogAppName TEXT")
+                db.execSQL("ALTER TABLE Subscription ADD COLUMN catalogIcon TEXT")
+                db.execSQL("ALTER TABLE Subscription ADD COLUMN catalogSound TEXT")
+                db.execSQL("ALTER TABLE Subscription ADD COLUMN catalogName TEXT")
+            }
+        }
     }
 }
 
@@ -493,6 +533,10 @@ interface SubscriptionDao {
     @Query("""
         SELECT 
           s.id, s.baseUrl, s.topic, s.instant, s.mutedUntil, s.minPriority, s.autoDelete, s.insistent, s.lastNotificationId, s.icon, s.upAppId, s.upConnectorToken, s.displayName, s.dedicatedChannels,
+          s.managed, s.catalogApp, s.catalogAppName, s.catalogIcon, s.catalogSound, s.catalogName,
+          (SELECT CASE WHEN n2.title != '' THEN n2.title ELSE n2.message END FROM Notification AS n2
+           WHERE n2.subscriptionId = s.id AND n2.deleted != 1 AND n2.encoding = ''
+           ORDER BY n2.timestamp DESC LIMIT 1) AS lastMessage,
           COUNT(n.id) totalCount, 
           COUNT(CASE n.notificationId WHEN 0 THEN NULL ELSE n.id END) newCount, 
           IFNULL(MAX(n.timestamp),0) AS lastActive
@@ -506,6 +550,10 @@ interface SubscriptionDao {
     @Query("""
         SELECT 
           s.id, s.baseUrl, s.topic, s.instant, s.mutedUntil, s.minPriority, s.autoDelete, s.insistent, s.lastNotificationId, s.icon, s.upAppId, s.upConnectorToken, s.displayName, s.dedicatedChannels,
+          s.managed, s.catalogApp, s.catalogAppName, s.catalogIcon, s.catalogSound, s.catalogName,
+          (SELECT CASE WHEN n2.title != '' THEN n2.title ELSE n2.message END FROM Notification AS n2
+           WHERE n2.subscriptionId = s.id AND n2.deleted != 1 AND n2.encoding = ''
+           ORDER BY n2.timestamp DESC LIMIT 1) AS lastMessage,
           COUNT(n.id) totalCount, 
           COUNT(CASE n.notificationId WHEN 0 THEN NULL ELSE n.id END) newCount, 
           IFNULL(MAX(n.timestamp),0) AS lastActive
@@ -519,6 +567,10 @@ interface SubscriptionDao {
     @Query("""
         SELECT 
           s.id, s.baseUrl, s.topic, s.instant, s.mutedUntil, s.minPriority, s.autoDelete, s.insistent, s.lastNotificationId, s.icon, s.upAppId, s.upConnectorToken, s.displayName, s.dedicatedChannels,
+          s.managed, s.catalogApp, s.catalogAppName, s.catalogIcon, s.catalogSound, s.catalogName,
+          (SELECT CASE WHEN n2.title != '' THEN n2.title ELSE n2.message END FROM Notification AS n2
+           WHERE n2.subscriptionId = s.id AND n2.deleted != 1 AND n2.encoding = ''
+           ORDER BY n2.timestamp DESC LIMIT 1) AS lastMessage,
           COUNT(n.id) totalCount, 
           COUNT(CASE n.notificationId WHEN 0 THEN NULL ELSE n.id END) newCount, 
           IFNULL(MAX(n.timestamp),0) AS lastActive
@@ -532,6 +584,10 @@ interface SubscriptionDao {
     @Query("""
         SELECT 
           s.id, s.baseUrl, s.topic, s.instant, s.mutedUntil, s.minPriority, s.autoDelete, s.insistent, s.lastNotificationId, s.icon, s.upAppId, s.upConnectorToken, s.displayName, s.dedicatedChannels,
+          s.managed, s.catalogApp, s.catalogAppName, s.catalogIcon, s.catalogSound, s.catalogName,
+          (SELECT CASE WHEN n2.title != '' THEN n2.title ELSE n2.message END FROM Notification AS n2
+           WHERE n2.subscriptionId = s.id AND n2.deleted != 1 AND n2.encoding = ''
+           ORDER BY n2.timestamp DESC LIMIT 1) AS lastMessage,
           COUNT(n.id) totalCount, 
           COUNT(CASE n.notificationId WHEN 0 THEN NULL ELSE n.id END) newCount, 
           IFNULL(MAX(n.timestamp),0) AS lastActive
@@ -545,6 +601,10 @@ interface SubscriptionDao {
     @Query("""
         SELECT 
           s.id, s.baseUrl, s.topic, s.instant, s.mutedUntil, s.minPriority, s.autoDelete, s.insistent, s.lastNotificationId, s.icon, s.upAppId, s.upConnectorToken, s.displayName, s.dedicatedChannels,
+          s.managed, s.catalogApp, s.catalogAppName, s.catalogIcon, s.catalogSound, s.catalogName,
+          (SELECT CASE WHEN n2.title != '' THEN n2.title ELSE n2.message END FROM Notification AS n2
+           WHERE n2.subscriptionId = s.id AND n2.deleted != 1 AND n2.encoding = ''
+           ORDER BY n2.timestamp DESC LIMIT 1) AS lastMessage,
           COUNT(n.id) totalCount, 
           COUNT(CASE n.notificationId WHEN 0 THEN NULL ELSE n.id END) newCount, 
           IFNULL(MAX(n.timestamp),0) AS lastActive
@@ -580,6 +640,26 @@ interface SubscriptionDao {
 
     @Query("DELETE FROM subscription WHERE id = :subscriptionId")
     fun remove(subscriptionId: Long)
+
+    // kudcrafts: catalog. Targeted update so a sync never overwrites the user's own settings (mute, rename, ...)
+    @Query("""
+        UPDATE subscription
+        SET managed = :managed, catalogApp = :catalogApp, catalogAppName = :catalogAppName,
+            catalogIcon = :catalogIcon, catalogSound = :catalogSound, catalogName = :catalogName
+        WHERE id = :subscriptionId
+    """)
+    fun updateCatalogFields(
+        subscriptionId: Long,
+        managed: Boolean,
+        catalogApp: String?,
+        catalogAppName: String?,
+        catalogIcon: String?,
+        catalogSound: String?,
+        catalogName: String?
+    )
+
+    @Query("UPDATE subscription SET mutedUntil = :mutedUntil WHERE catalogApp = :catalogApp")
+    fun updateMutedUntilForCatalogApp(catalogApp: String, mutedUntil: Long)
 }
 
 @Dao
@@ -731,4 +811,29 @@ interface CustomHeaderDao {
 
     @Query("DELETE FROM CustomHeader WHERE baseUrl = :baseUrl AND name = :name")
     suspend fun delete(baseUrl: String, name: String)
+}
+
+/**
+ * kudcrafts: catalog. The catalog-owned columns of a [Subscription], written as one unit by CatalogSync.
+ */
+data class CatalogFields(
+    val managed: Boolean,
+    val app: String?,
+    val appName: String?,
+    val icon: String?,
+    val sound: String?,
+    val name: String?
+) {
+    companion object {
+        val NONE = CatalogFields(managed = false, app = null, appName = null, icon = null, sound = null, name = null)
+
+        fun of(subscription: Subscription) = CatalogFields(
+            managed = subscription.managed,
+            app = subscription.catalogApp,
+            appName = subscription.catalogAppName,
+            icon = subscription.catalogIcon,
+            sound = subscription.catalogSound,
+            name = subscription.catalogName
+        )
+    }
 }

@@ -26,22 +26,50 @@ class MainAdapter(
     private val onClick: (Subscription) -> Unit,
     private val onLongClick: (Subscription) -> Unit,
     private val countDrawable: Drawable,
-    private val onPrimaryColor: Int
+    private val onPrimaryColor: Int,
+    private val headerActions: AppHeaderViewHolder.Actions? = null // kudcrafts: catalog app headers
 ) :
-    ListAdapter<Subscription, MainAdapter.SubscriptionViewHolder>(TopicDiffCallback) {
+    ListAdapter<MainAdapter.Item, RecyclerView.ViewHolder>(ItemDiffCallback) {
     val selected = mutableSetOf<Long>() // Subscription IDs
 
+    /**
+     * kudcrafts: catalog. The list is sectioned by catalog app; subscriptions without an app go under
+     * "Other". Without any catalog subscription the list looks exactly like upstream (no headers).
+     */
+    sealed class Item {
+        data class Header(val app: String?, val name: String, val icon: String?, val unread: Int) : Item()
+        data class Row(val subscription: Subscription) : Item()
+    }
+
+    fun submitSubscriptions(subscriptions: List<Subscription>, otherLabel: String) {
+        submitList(buildItems(subscriptions, otherLabel))
+    }
+
+    override fun getItemViewType(position: Int): Int {
+        return when (getItem(position)) {
+            is Item.Header -> VIEW_TYPE_HEADER
+            is Item.Row -> VIEW_TYPE_ROW
+        }
+    }
+
     /* Creates and inflates view and return TopicViewHolder. */
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): SubscriptionViewHolder {
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        if (viewType == VIEW_TYPE_HEADER) {
+            val view = LayoutInflater.from(parent.context)
+                .inflate(R.layout.fragment_main_app_header, parent, false)
+            return AppHeaderViewHolder(view, headerActions)
+        }
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.fragment_main_item, parent, false)
         return SubscriptionViewHolder(view, repository, selected, onClick, onLongClick, countDrawable, onPrimaryColor)
     }
 
     /* Gets current topic and uses it to bind view. */
-    override fun onBindViewHolder(holder: SubscriptionViewHolder, position: Int) {
-        val subscription = getItem(position)
-        holder.bind(subscription)
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        when (val item = getItem(position)) {
+            is Item.Header -> (holder as AppHeaderViewHolder).bind(item)
+            is Item.Row -> (holder as SubscriptionViewHolder).bind(item.subscription)
+        }
     }
 
     fun toggleSelection(subscriptionId: Long) {
@@ -52,9 +80,10 @@ class MainAdapter(
         }
 
         if (selected.isNotEmpty()) {
-            val listIds = currentList.map { subscription -> subscription.id }
-            val subscriptionPosition = listIds.indexOf(subscriptionId)
-            notifyItemChanged(subscriptionPosition)
+            val subscriptionPosition = currentList.indexOfFirst { it is Item.Row && it.subscription.id == subscriptionId }
+            if (subscriptionPosition >= 0) {
+                notifyItemChanged(subscriptionPosition)
+            }
         }
     }
 
@@ -117,7 +146,11 @@ class MainAdapter(
                 imageView.setImageResource(R.drawable.ic_sms_gray_24dp)
             }
             nameView.text = displayName(appBaseUrl, subscription)
-            statusView.text = statusMessage
+            statusView.text = if (subscription.catalogApp != null && !subscription.lastMessage.isNullOrBlank()) {
+                subscription.lastMessage.lineSequence().first() // kudcrafts: catalog rows show the last message
+            } else {
+                statusMessage
+            }
             dateView.text = dateText
             dateView.visibility = View.VISIBLE
             val showConnectionError = subscription.instant && subscription.connectionDetails.hasError()
@@ -143,17 +176,47 @@ class MainAdapter(
         }
     }
 
-    object TopicDiffCallback : DiffUtil.ItemCallback<Subscription>() {
-        override fun areItemsTheSame(oldItem: Subscription, newItem: Subscription): Boolean {
-            return oldItem.id == newItem.id
+    object ItemDiffCallback : DiffUtil.ItemCallback<Item>() {
+        override fun areItemsTheSame(oldItem: Item, newItem: Item): Boolean {
+            return when {
+                oldItem is Item.Row && newItem is Item.Row -> oldItem.subscription.id == newItem.subscription.id
+                oldItem is Item.Header && newItem is Item.Header -> oldItem.app == newItem.app
+                else -> false
+            }
         }
 
-        override fun areContentsTheSame(oldItem: Subscription, newItem: Subscription): Boolean {
+        override fun areContentsTheSame(oldItem: Item, newItem: Item): Boolean {
             return oldItem == newItem
         }
     }
 
     companion object {
         const val TAG = "NtfyMainAdapter"
+        private const val VIEW_TYPE_HEADER = 1
+        private const val VIEW_TYPE_ROW = 2
+
+        /** Pure: sections by catalog app (sorted by app name), then "Other". No headers if nothing is from the catalog. */
+        fun buildItems(subscriptions: List<Subscription>, otherLabel: String): List<Item> {
+            val (catalog, other) = subscriptions.partition { it.catalogApp != null }
+            if (catalog.isEmpty()) {
+                return other.map { Item.Row(it) }
+            }
+            val items = mutableListOf<Item>()
+            catalog
+                .groupBy { it.catalogApp!! }
+                .entries
+                .sortedWith(compareBy({ (it.value.first().catalogAppName ?: it.key).lowercase() }, { it.key }))
+                .forEach { (app, subs) ->
+                    val name = subs.first().catalogAppName ?: app
+                    val icon = subs.firstNotNullOfOrNull { it.icon }
+                    items.add(Item.Header(app, name, icon, subs.sumOf { it.newCount }))
+                    subs.forEach { items.add(Item.Row(it)) }
+                }
+            if (other.isNotEmpty()) {
+                items.add(Item.Header(null, otherLabel, null, other.sumOf { it.newCount }))
+                other.forEach { items.add(Item.Row(it)) }
+            }
+            return items
+        }
     }
 }

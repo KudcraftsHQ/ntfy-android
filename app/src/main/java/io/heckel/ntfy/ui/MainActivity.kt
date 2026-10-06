@@ -58,6 +58,8 @@ import io.heckel.ntfy.msg.DownloadManager
 import io.heckel.ntfy.msg.DownloadType
 import io.heckel.ntfy.msg.NotificationDispatcher
 import io.heckel.ntfy.msg.Poller
+import io.heckel.ntfy.service.CatalogSync
+import io.heckel.ntfy.service.CatalogSyncWorker
 import io.heckel.ntfy.service.SubscriberService
 import io.heckel.ntfy.service.SubscriberServiceManager
 import io.heckel.ntfy.util.Log
@@ -201,7 +203,8 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
             ResourcesCompat.getDrawable(resources, R.drawable.ic_circle, theme)!!.apply {
                 setTint(Colors.primary(this@MainActivity))
             },
-            Colors.onPrimary(this)
+            Colors.onPrimary(this),
+            catalogHeaderActions
         )
         mainList.adapter = adapter
         
@@ -216,7 +219,7 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
         viewModel.list().observe(this) {
             it?.let { subscriptions ->
                 // Update main list
-                adapter.submitList(subscriptions as MutableList<Subscription>)
+                adapter.submitSubscriptions(subscriptions, getString(R.string.kc_main_section_other))
                 if (it.isEmpty()) {
                     mainListContainer.visibility = View.GONE
                     noEntries.visibility = View.VISIBLE
@@ -378,6 +381,7 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
 
         // Background things
         schedulePeriodicPollWorker()
+        CatalogSyncWorker.schedule(this) // kudcrafts: catalog
         schedulePeriodicServiceRestartWorker()
         schedulePeriodicDeleteWorker()
 
@@ -399,6 +403,7 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
 
     override fun onResume() {
         super.onResume()
+        CatalogSync.now(this) // kudcrafts: catalog (no-op when not signed in)
         showHideNotificationMenuItems()
         showHideConnectionErrorMenuItem(repository.getConnectionDetails())
         showHideNoNetworkBanner()
@@ -464,6 +469,42 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
             Log.w(TAG, "Failed to unregister network callback: ${e.message}", e)
         }
         networkCallback = null
+    }
+
+    // kudcrafts: catalog app header menu (mute/unmute every topic of one app, open Android's settings)
+    private val catalogHeaderActions = object : AppHeaderViewHolder.Actions {
+        override fun onMuteApp(app: String, appName: String) {
+            val fragment = NotificationFragment()
+            fragment.settingsListener = object : NotificationFragment.NotificationSettingsListener {
+                override fun onNotificationMutedUntilChanged(mutedUntilTimestamp: Long) {
+                    setCatalogAppMutedUntil(app, mutedUntilTimestamp)
+                }
+            }
+            fragment.show(supportFragmentManager, NotificationFragment.TAG)
+        }
+
+        override fun onUnmuteApp(app: String) {
+            setCatalogAppMutedUntil(app, Repository.MUTED_UNTIL_SHOW_ALL)
+        }
+
+        override fun onAppNotificationSettings() {
+            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            }
+            startActivity(intent)
+        }
+    }
+
+    private fun setCatalogAppMutedUntil(app: String, mutedUntilTimestamp: Long) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            repository.setCatalogAppMutedUntil(app, mutedUntilTimestamp)
+        }
+        val message = when (mutedUntilTimestamp) {
+            Repository.MUTED_UNTIL_SHOW_ALL -> getString(R.string.notification_dialog_enabled_toast_message)
+            Repository.MUTED_UNTIL_FOREVER -> getString(R.string.notification_dialog_muted_forever_toast_message)
+            else -> getString(R.string.notification_dialog_muted_until_toast_message, formatDateShort(mutedUntilTimestamp))
+        }
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
     private fun schedulePeriodicPollWorker() {
@@ -837,7 +878,17 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
         val dialog = MaterialAlertDialogBuilder(this)
             .setMessage(R.string.main_action_mode_delete_dialog_message)
             .setPositiveButton(R.string.main_action_mode_delete_dialog_permanently_delete) { _, _ ->
-                adapter.selected.map { subscriptionId -> viewModel.remove(this, subscriptionId) }
+                // kudcrafts: catalog topics would come straight back on the next sync, so they are muted, not deleted
+                val managedIds = adapter.currentList
+                    .mapNotNull { (it as? MainAdapter.Item.Row)?.subscription }
+                    .filter { it.managed }
+                    .map { it.id }
+                    .toSet()
+                val skipped = adapter.selected.count { it in managedIds }
+                adapter.selected.filter { it !in managedIds }.map { subscriptionId -> viewModel.remove(this, subscriptionId) }
+                if (skipped > 0) {
+                    Toast.makeText(this, getString(R.string.kc_main_delete_managed_skipped, skipped), Toast.LENGTH_LONG).show()
+                }
                 finishActionMode()
             }
             .setNegativeButton(R.string.main_action_mode_delete_dialog_cancel) { _, _ ->

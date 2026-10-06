@@ -1,5 +1,16 @@
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto"
                   app:title="@string/settings_title">
+    <!-- kudcrafts: catalog sign-in -->
+    <PreferenceCategory
+            app:key="@string/kc_settings_account_header_key"
+            app:title="@string/kc_settings_account_header">
+        <Preference
+                app:key="@string/kc_settings_account_key"
+                app:title="@string/kc_settings_account_title"/>
+        <Preference
+                app:key="@string/kc_settings_sync_now_key"
+                app:title="@string/kc_settings_sync_now_title"/>
+    </PreferenceCategory>
     <PreferenceCategory app:title="@string/settings_notifications_header">
         <ListPreference
                 app:key="@string/settings_notifications_muted_until_key"

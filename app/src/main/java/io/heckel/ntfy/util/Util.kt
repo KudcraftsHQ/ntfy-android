@@ -69,6 +69,10 @@ fun subscriptionTopicShortUrl(subscription: Subscription) : String {
 fun displayName(appBaseUrl: String?, subscription: Subscription) : String {
     if (subscription.displayName != null) {
         return subscription.displayName
+    } else if (!subscription.catalogName.isNullOrEmpty()) {
+        return subscription.catalogName // kudcrafts: catalog, user rename > catalog name > topic
+    } else if (subscription.catalogApp != null) {
+        return subscription.topic
     } else if (appBaseUrl == subscription.baseUrl) {
         return subscription.topic
     }

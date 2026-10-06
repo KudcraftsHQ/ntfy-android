@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- kudcrafts: fork identity for the fdroid flavor (spec section 7.7). Overrides src/main/res/values/values.xml -->
+<resources>
+    <string name="app_name" translatable="false">ntfy Kudcrafts</string>
+    <string name="app_base_url" translatable="false">https://ntfy.kudcrafts.com</string>
+</resources>

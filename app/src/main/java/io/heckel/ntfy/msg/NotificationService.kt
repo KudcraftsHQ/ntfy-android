@@ -83,8 +83,19 @@ class NotificationService(val context: Context) {
 
     private fun displayInternal(subscription: Subscription, notification: Notification, update: Boolean = false) {
         val title = formatTitle(appBaseUrl, subscription, notification)
-        val groupId = if (subscription.dedicatedChannels) subscriptionGroupId(subscription) else DEFAULT_GROUP
-        val channelId = toChannelId(groupId, notification.priority)
+        val catalogApp = subscription.catalogApp // kudcrafts: catalog, channels per (app, sound class)
+        val groupId = if (catalogApp != null) {
+            CatalogChannels.groupId(catalogApp)
+        } else if (subscription.dedicatedChannels) {
+            subscriptionGroupId(subscription)
+        } else {
+            DEFAULT_GROUP
+        }
+        val channelId = if (catalogApp != null) {
+            CatalogChannels.channelId(catalogApp, subscription.catalogSound, notification.priority)
+        } else {
+            toChannelId(groupId, notification.priority)
+        }
         val insistent = notification.priority == PRIORITY_MAX &&
                 (repository.getInsistentMaxPriorityEnabled() || subscription.insistent == Repository.INSISTENT_MAX_PRIORITY_ENABLED)
         val builder = NotificationCompat.Builder(context, channelId)
@@ -106,9 +117,14 @@ class NotificationService(val context: Context) {
         maybeAddCancelAction(builder, notification)
         maybeAddUserActions(builder, notification)
 
-        maybeCreateNotificationGroup(groupId, subscriptionGroupName(subscription))
-        maybeCreateNotificationChannel(groupId, notification.priority)
-        maybePlayInsistentSound(groupId, insistent)
+        if (catalogApp != null) {
+            maybeCreateCatalogChannels(catalogApp, subscription.catalogAppName ?: catalogApp, subscription.catalogSound)
+            maybePlayInsistentSound(CatalogChannels.channelId(catalogApp, subscription.catalogSound, CatalogChannels.Band.MAX), insistent)
+        } else {
+            maybeCreateNotificationGroup(groupId, subscriptionGroupName(subscription))
+            maybeCreateNotificationChannel(groupId, notification.priority)
+            maybePlayInsistentSound(toChannelId(groupId, PRIORITY_MAX), insistent)
+        }
 
         notificationManager.notify(notification.notificationId, builder.build())
     }
@@ -430,7 +446,7 @@ class NotificationService(val context: Context) {
         }
     }
 
-    private fun maybePlayInsistentSound(groupId: String, insistent: Boolean) {
+    private fun maybePlayInsistentSound(maxChannelId: String, insistent: Boolean) {
         if (!insistent) {
             return
         }
@@ -440,7 +456,7 @@ class NotificationService(val context: Context) {
             if (audioManager.getStreamVolume(AudioManager.STREAM_ALARM) != 0) {
                 Log.d(TAG, "Media player: Playing insistent alarm on alarm channel")
                 mediaPlayer.reset()
-                mediaPlayer.setDataSource(context, getInsistentSound(groupId))
+                mediaPlayer.setDataSource(context, getInsistentSound(maxChannelId))
                 mediaPlayer.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build())
                 mediaPlayer.isLooping = true
                 mediaPlayer.prepare()
@@ -453,10 +469,123 @@ class NotificationService(val context: Context) {
         }
     }
 
-    private fun getInsistentSound(groupId: String): Uri {
-        val channelId = toChannelId(groupId, PRIORITY_MAX)
-        val channel = notificationManager.getNotificationChannel(channelId)
-        return channel.sound
+    private fun getInsistentSound(maxChannelId: String): Uri {
+        val channel = notificationManager.getNotificationChannel(maxChannelId)
+        return channel?.sound ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+    }
+
+    // kudcrafts: catalog channels (spec section 7.5)
+
+    /** Creates the group and the three channels of one (app, sound class). Creating an existing channel only renames it. */
+    fun maybeCreateCatalogChannels(app: String, appName: String, sound: String?) {
+        val soundClass = CatalogSound.normalize(sound)
+        maybeCreateNotificationGroup(CatalogChannels.groupId(app), appName)
+        CatalogChannels.Band.entries.forEach { band ->
+            notificationManager.createNotificationChannel(buildCatalogChannel(app, appName, soundClass, band))
+        }
+    }
+
+    /**
+     * Creates channels for every (app, sound class) in use and deletes catalog channels and groups that nothing
+     * uses anymore (e.g. the app's default sound changed, or the app left the catalog). User edits to a live
+     * channel are kept by Android; non-catalog channels are never touched.
+     */
+    fun reconcileCatalogChannels(subscriptions: List<Subscription>) {
+        try {
+            subscriptions
+                .filter { it.catalogApp != null }
+                .distinctBy { it.catalogApp to CatalogSound.normalize(it.catalogSound) }
+                .forEach { maybeCreateCatalogChannels(it.catalogApp!!, it.catalogAppName ?: it.catalogApp, it.catalogSound) }
+            CatalogChannels.staleChannelIds(notificationManager.notificationChannels.map { it.id }, subscriptions)
+                .forEach { notificationManager.deleteNotificationChannel(it) }
+            CatalogChannels.staleGroupIds(notificationManager.notificationChannelGroups.map { it.id }, subscriptions)
+                .forEach { notificationManager.deleteNotificationChannelGroup(it) }
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to reconcile catalog channels", e)
+        }
+    }
+
+    private fun buildCatalogChannel(app: String, appName: String, soundClass: String, band: CatalogChannels.Band): NotificationChannel {
+        val id = CatalogChannels.channelId(app, soundClass, band)
+        val soundLabel = catalogSoundLabel(soundClass)
+        val pause = 300L
+        val shortVibration = longArrayOf(pause, 100, pause, 100, pause, 100)
+        val longVibration = longArrayOf(pause, 100, pause, 100, pause, 100, pause, 2000)
+        val channel = when (band) {
+            CatalogChannels.Band.LOW -> NotificationChannel(id, context.getString(R.string.kc_channel_name_low, appName), NotificationManager.IMPORTANCE_LOW).apply {
+                setSound(null, null)
+                enableVibration(false)
+            }
+            CatalogChannels.Band.MAX -> NotificationChannel(id, context.getString(R.string.kc_channel_name_max, appName), NotificationManager.IMPORTANCE_HIGH).apply {
+                enableLights(true)
+                enableVibration(true)
+                setBypassDnd(true)
+                vibrationPattern = longVibration + longVibration + longVibration
+                setSound(catalogSoundUri(CatalogSound.URGENT), catalogAudioAttributes())
+            }
+            CatalogChannels.Band.NORMAL -> {
+                val importance = when (soundClass) {
+                    CatalogSound.SILENT -> NotificationManager.IMPORTANCE_LOW
+                    CatalogSound.DEFAULT -> NotificationManager.IMPORTANCE_DEFAULT
+                    else -> NotificationManager.IMPORTANCE_HIGH
+                }
+                NotificationChannel(id, context.getString(R.string.kc_channel_name, appName, soundLabel), importance).apply {
+                    when (soundClass) {
+                        CatalogSound.SILENT -> {
+                            setSound(null, null)
+                            enableVibration(false)
+                        }
+                        CatalogSound.DEFAULT -> {
+                            setSound(catalogSoundUri(CatalogSound.DEFAULT), catalogAudioAttributes())
+                            enableVibration(false)
+                        }
+                        CatalogSound.ALERT -> {
+                            setSound(catalogSoundUri(CatalogSound.ALERT), catalogAudioAttributes())
+                            enableVibration(true)
+                            vibrationPattern = shortVibration
+                        }
+                        else -> {
+                            setSound(catalogSoundUri(CatalogSound.URGENT), catalogAudioAttributes())
+                            enableVibration(true)
+                            vibrationPattern = longVibration
+                        }
+                    }
+                }
+            }
+        }
+        channel.group = CatalogChannels.groupId(app)
+        return channel
+    }
+
+    /**
+     * android.resource URI of the bundled clip kc_<class> (res/raw, synthesized in CI). If a build has no
+     * clips (a local debug build without sox), fall back to the system notification sound.
+     */
+    private fun catalogSoundUri(soundClass: String): Uri {
+        val name = "kc_$soundClass"
+        @Suppress("DiscouragedApi")
+        val resId = context.resources.getIdentifier(name, "raw", context.packageName)
+        return if (resId != 0) {
+            "android.resource://${context.packageName}/raw/$name".toUri()
+        } else {
+            RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        }
+    }
+
+    private fun catalogAudioAttributes(): AudioAttributes {
+        return AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+    }
+
+    private fun catalogSoundLabel(soundClass: String): String {
+        return when (soundClass) {
+            CatalogSound.SILENT -> context.getString(R.string.kc_sound_silent)
+            CatalogSound.ALERT -> context.getString(R.string.kc_sound_alert)
+            CatalogSound.URGENT -> context.getString(R.string.kc_sound_urgent)
+            else -> context.getString(R.string.kc_sound_default)
+        }
     }
 
     /**

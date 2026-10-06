@@ -114,11 +114,11 @@ class ApiService(private val context: Context) {
         }
     }
 
-    suspend fun poll(subscription: Subscription): List<Notification> {
+    suspend fun poll(subscription: Subscription, since: String? = null): List<Notification> {
         val subscriptionId = subscription.id
         val baseUrl = subscription.baseUrl
         val topic = subscription.topic
-        val sinceVal = subscription.lastNotificationId ?: SINCE_ALL
+        val sinceVal = since ?: subscription.lastNotificationId ?: SINCE_ALL // kudcrafts: explicit since for catalog backfill
         val url = topicUrlJsonPoll(baseUrl, topic, sinceVal)
         Log.d(TAG, "Polling topic $url")
 
@@ -129,10 +129,13 @@ class ApiService(private val context: Context) {
             if (!response.isSuccessful) {
                 throw Exception("Unexpected response ${response.code} when polling topic $url")
             }
-            val body = response.body.string().trim()
-            if (body.isEmpty()) return emptyList()
-            val notifications = body.lines().mapNotNull { line ->
-                parser.parse(line, subscriptionId = subscriptionId, baseUrl = baseUrl)
+            // kudcrafts: read line by line instead of one big string (a backfill can be up to 10 MB per topic)
+            val source = response.body.source()
+            val notifications = mutableListOf<Notification>()
+            while (true) {
+                val line = source.readUtf8Line() ?: break
+                if (line.isBlank()) continue
+                parser.parse(line, subscriptionId = subscriptionId, baseUrl = baseUrl)?.let { notifications.add(it) }
             }
 
             Log.d(TAG, "Notifications: $notifications")

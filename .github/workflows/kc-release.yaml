@@ -1,0 +1,103 @@
+# kudcrafts: build the fdroid flavor (applicationId com.kudcrafts.ntfy).
+# - Pull requests / manual runs: unit tests + a debug APK as a workflow artifact.
+# - Tags v<upstream>-kc.<n> (e.g. v1.25.2-kc.1): signed release APK published to GitHub Releases,
+#   named ntfy-kudcrafts-<tag>.apk, which Obtainium picks up.
+# Secrets (repo settings): KC_KEYSTORE_BASE64, KC_KEYSTORE_PASSWORD, KC_KEY_ALIAS, KC_KEY_PASSWORD.
+name: kc-release
+
+on:
+  push:
+    tags: ['v*-kc.*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kc-release-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Synthesize notification sounds (sox)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sox libsox-fmt-all
+          scripts/kc-sounds.sh
+
+      - name: Unit tests
+        run: ./gradlew --no-daemon testFdroidDebugUnitTest
+
+      - name: Debug APK (pull requests)
+        if: env.IS_RELEASE != 'true'
+        run: ./gradlew --no-daemon assembleFdroidDebug
+
+      - uses: actions/upload-artifact@v4
+        if: env.IS_RELEASE != 'true'
+        with:
+          name: ntfy-kudcrafts-debug
+          path: app/build/outputs/apk/fdroid/debug/*.apk
+
+      - name: Version from tag
+        if: env.IS_RELEASE == 'true'
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"                      # 1.25.2-kc.1
+          N="${VERSION##*-kc.}"                   # 1
+          if ! [[ "$N" =~ ^[0-9]+$ ]] || [ "$N" -gt 99 ]; then
+            echo "Tag $TAG must look like v<upstream>-kc.<1..99>" >&2; exit 1
+          fi
+          UPSTREAM_CODE=$(sed -nE 's/^\s*versionCode ([0-9]+)\s*$/\1/p' app/build.gradle | head -1)
+          CODE=$((UPSTREAM_CODE * 100 + N))
+          echo "KC_VERSION_NAME=$VERSION" >> "$GITHUB_ENV"
+          echo "KC_VERSION_CODE=$CODE" >> "$GITHUB_ENV"
+          echo "Building $VERSION (versionCode $CODE)"
+
+      - name: Signed release APK
+        if: env.IS_RELEASE == 'true'
+        env:
+          KC_KEYSTORE_BASE64: ${{ secrets.KC_KEYSTORE_BASE64 }}
+          KC_KEYSTORE_PASSWORD: ${{ secrets.KC_KEYSTORE_PASSWORD }}
+          KC_KEY_ALIAS: ${{ secrets.KC_KEY_ALIAS }}
+          KC_KEY_PASSWORD: ${{ secrets.KC_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KC_KEYSTORE_BASE64" ] || [ -z "$KC_KEYSTORE_PASSWORD" ] || [ -z "$KC_KEY_ALIAS" ]; then
+            echo "Signing secrets are missing; refusing to publish an unsigned APK" >&2; exit 1
+          fi
+          export KC_KEYSTORE_FILE="$RUNNER_TEMP/kc-release.jks"
+          echo "$KC_KEYSTORE_BASE64" | base64 -d > "$KC_KEYSTORE_FILE"
+          ./gradlew --no-daemon assembleFdroidRelease
+          rm -f "$KC_KEYSTORE_FILE"
+          APK=app/build/outputs/apk/fdroid/release/app-fdroid-release.apk
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
+          "$APKSIGNER" verify --print-certs "$APK"
+          mkdir -p dist
+          cp "$APK" "dist/ntfy-kudcrafts-${GITHUB_REF_NAME}.apk"
+          (cd dist && sha256sum *.apk > SHA256SUMS)
+
+      - name: Publish GitHub Release
+        if: env.IS_RELEASE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="ntfy Kudcrafts ${KC_VERSION_NAME} (versionCode ${KC_VERSION_CODE}). Install or update with Obtainium (repo KudcraftsHQ/ntfy-android)."
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --title "ntfy Kudcrafts ${KC_VERSION_NAME}" --notes "$NOTES" --verify-tag
+          fi

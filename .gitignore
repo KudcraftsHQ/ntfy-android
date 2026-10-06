@@ -57,3 +57,6 @@ proguard-project.txt
 # Android Studio/IDEA
 *.iml
 .idea
+
+# kudcrafts: notification sounds are synthesized by scripts/kc-sounds.sh (in CI), not committed
+app/src/main/res/raw/kc_*.ogg

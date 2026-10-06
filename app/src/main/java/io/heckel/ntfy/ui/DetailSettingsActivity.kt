@@ -142,7 +142,9 @@ class DetailSettingsActivity : AppCompatActivity() {
                 loadInsistentMaxPriorityPref()
                 loadIconSetPref()
                 loadIconRemovePref()
-                loadDedicatedChannelsPrefs()
+                if (subscription.catalogApp == null) {
+                    loadDedicatedChannelsPrefs() // kudcrafts: catalog topics always use per-app channels
+                }
                 loadOpenChannelsPrefs()
             } else {
                 val notificationsHeaderId = context?.getString(R.string.detail_settings_notifications_header_key) ?: return
@@ -151,6 +153,18 @@ class DetailSettingsActivity : AppCompatActivity() {
             }
             loadDisplayNamePref()
             loadTopicUrlPref()
+            loadCatalogPrefs()
+        }
+
+        // kudcrafts: catalog. Read-only facts the server decides
+        private fun loadCatalogPrefs() {
+            val app = subscription.catalogApp ?: return
+            val appPref: Preference? = findPreference(getString(R.string.kc_detail_settings_catalog_app_key))
+            appPref?.isVisible = true
+            appPref?.summary = subscription.catalogAppName ?: app
+            val soundPref: Preference? = findPreference(getString(R.string.kc_detail_settings_catalog_sound_key))
+            soundPref?.isVisible = true
+            soundPref?.summary = getString(R.string.kc_detail_settings_catalog_sound_summary, subscription.catalogSound ?: "default")
         }
 
         private fun loadInstantPref() {
@@ -207,7 +221,7 @@ class DetailSettingsActivity : AppCompatActivity() {
         private fun loadOpenChannelsPrefs() {
             val prefId = context?.getString(R.string.detail_settings_notifications_open_channels_key) ?: return
             openChannelsPref = findPreference(prefId) ?: return
-            openChannelsPref.isVisible = subscription.dedicatedChannels
+            openChannelsPref.isVisible = subscription.dedicatedChannels || subscription.catalogApp != null // kudcrafts: per-app channels
             openChannelsPref.preferenceDataStore = object : PreferenceDataStore() { } // Dummy store to protect from accidentally overwriting
             openChannelsPref.onPreferenceClickListener = Preference.OnPreferenceClickListener { _ ->
                 val settingsIntent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
@@ -372,6 +386,7 @@ class DetailSettingsActivity : AppCompatActivity() {
                 iconRemovePref.isVisible = false
                 iconSetPref.isVisible = true
                 deleteIcon(subscription.icon)
+                repository.setCatalogIconUrl(subscription.id, null) // kudcrafts: the user's choice wins over the app icon
                 save(subscription.copy(icon = null))
                 true
             }
@@ -474,6 +489,7 @@ class DetailSettingsActivity : AppCompatActivity() {
                         iconSetPref.isVisible = false
 
                         // Finally, save (this is last!)
+                        repository.setCatalogIconUrl(subscription.id, null) // kudcrafts: custom icon, never replaced by sync
                         save(subscription.copy(icon = outputUri.toString()))
                     } catch (e: Exception) {
                         Log.w(TAG, "Saving icon failed", e)

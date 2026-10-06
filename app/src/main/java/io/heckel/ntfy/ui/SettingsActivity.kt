@@ -33,6 +33,7 @@ import io.heckel.ntfy.backup.Backuper
 import io.heckel.ntfy.db.CustomHeader
 import io.heckel.ntfy.db.Repository
 import io.heckel.ntfy.db.User
+import io.heckel.ntfy.service.CatalogSync
 import io.heckel.ntfy.service.SubscriberServiceManager
 import io.heckel.ntfy.up.Distributor
 import io.heckel.ntfy.util.*
@@ -161,6 +162,88 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
         private lateinit var serviceManager: SubscriberServiceManager
         private var autoDownloadSelection = AUTO_DOWNLOAD_SELECTION_NOT_SET
 
+        // kudcrafts: catalog sign-in
+
+        private fun loadCatalogAccountPrefs() {
+            val accountPref: Preference = findPreference(getString(R.string.kc_settings_account_key)) ?: return
+            val syncPref: Preference = findPreference(getString(R.string.kc_settings_sync_now_key)) ?: return
+            accountPref.preferenceDataStore = object : PreferenceDataStore() { } // Dummy store
+            syncPref.preferenceDataStore = object : PreferenceDataStore() { }
+            accountPref.onPreferenceClickListener = OnPreferenceClickListener {
+                onCatalogAccountClick()
+                true
+            }
+            syncPref.onPreferenceClickListener = OnPreferenceClickListener {
+                CatalogSync.now(requireContext())
+                Toast.makeText(requireContext(), R.string.kc_settings_sync_now_toast, Toast.LENGTH_SHORT).show()
+                true
+            }
+            requireActivity().supportFragmentManager.setFragmentResultListener(CatalogLoginDialog.RESULT_KEY, this) { _, _ ->
+                refreshCatalogAccountPrefs()
+            }
+            refreshCatalogAccountPrefs()
+        }
+
+        override fun onResume() {
+            super.onResume()
+            refreshCatalogAccountPrefs()
+        }
+
+        private fun refreshCatalogAccountPrefs() {
+            if (!this::repository.isInitialized) return
+            val accountPref: Preference = findPreference(getString(R.string.kc_settings_account_key)) ?: return
+            val syncPref: Preference = findPreference(getString(R.string.kc_settings_sync_now_key)) ?: return
+            lifecycleScope.launch(Dispatchers.IO) {
+                val baseUrl = repository.getCatalogBaseUrl()
+                val user = baseUrl?.let { repository.getUser(it) }
+                val authError = repository.getCatalogAuthError()
+                val lastSync = repository.getCatalogLastSync()
+                activity?.runOnUiThread {
+                    if (!isAdded) return@runOnUiThread
+                    accountPref.summary = when {
+                        baseUrl == null || user == null -> getString(R.string.kc_settings_account_summary_signed_out, shortUrl(getString(R.string.app_base_url)))
+                        authError -> getString(R.string.kc_settings_account_summary_auth_error, user.username)
+                        else -> getString(R.string.kc_settings_account_summary_signed_in, user.username, shortUrl(baseUrl))
+                    }
+                    syncPref.isVisible = baseUrl != null && user != null
+                    syncPref.summary = if (lastSync == 0L) {
+                        getString(R.string.kc_settings_sync_now_summary_never)
+                    } else {
+                        getString(R.string.kc_settings_sync_now_summary, formatDateShort(lastSync / 1000))
+                    }
+                }
+            }
+        }
+
+        private fun onCatalogAccountClick() {
+            lifecycleScope.launch(Dispatchers.IO) {
+                val baseUrl = repository.getCatalogBaseUrl()
+                val user = baseUrl?.let { repository.getUser(it) }
+                activity?.runOnUiThread {
+                    if (!isAdded) return@runOnUiThread
+                    if (baseUrl == null || user == null) {
+                        CatalogLoginDialog.newInstance().show(requireActivity().supportFragmentManager, CatalogLoginDialog.TAG)
+                        return@runOnUiThread
+                    }
+                    MaterialAlertDialogBuilder(requireContext())
+                        .setTitle(getString(R.string.kc_settings_account_dialog_title, user.username, shortUrl(baseUrl)))
+                        .setMessage(R.string.kc_settings_account_dialog_message)
+                        .setPositiveButton(R.string.kc_settings_account_dialog_sign_in_again) { _, _ ->
+                            CatalogLoginDialog.newInstance(user.username).show(requireActivity().supportFragmentManager, CatalogLoginDialog.TAG)
+                        }
+                        .setNegativeButton(R.string.kc_settings_account_dialog_sign_out) { _, _ ->
+                            val appContext = requireContext().applicationContext
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                CatalogSync.signOut(appContext)
+                                refreshCatalogAccountPrefs()
+                            }
+                        }
+                        .setNeutralButton(R.string.kc_settings_account_dialog_cancel, null)
+                        .show()
+                }
+            }
+        }
+
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             setPreferencesFromResource(R.xml.main_preferences, rootKey)
 
@@ -168,6 +251,9 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
             repository = Repository.getInstance(requireActivity())
             serviceManager = SubscriberServiceManager(requireActivity())
             autoDownloadSelection = repository.getAutoDownloadMaxSize() // Only used for <= Android P, due to permissions request
+
+            // kudcrafts: catalog sign-in ("Kudcrafts account")
+            loadCatalogAccountPrefs()
 
             // Important note: We do not use the default shared prefs to store settings. Every
             // preferenceDataStore is overridden to use the repository. This is convenient, because

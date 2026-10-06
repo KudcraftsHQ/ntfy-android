@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit
  * All clients are configured with SSL/TLS settings from CertUtil for custom certificate support.
  */
 object HttpUtil {
+    const val ACCESS_TOKEN_PREFIX = "tk_"
     val USER_AGENT = "ntfy/${BuildConfig.VERSION_NAME} (${BuildConfig.FLAVOR}; Android ${Build.VERSION.RELEASE}; SDK ${Build.VERSION.SDK_INT})"
 
     /**
@@ -74,7 +75,9 @@ object HttpUtil {
         val builder = Request.Builder()
             .url(url)
             .addHeader("User-Agent", USER_AGENT)
-        if (user != null) {
+        if (user != null && user.password.startsWith(ACCESS_TOKEN_PREFIX)) {
+            builder.addHeader("Authorization", "Bearer ${user.password}") // kudcrafts: catalog sign-in stores an access token
+        } else if (user != null) {
             builder.addHeader("Authorization", Credentials.basic(user.username, user.password, UTF_8))
         }
         customHeaders.forEach { header ->

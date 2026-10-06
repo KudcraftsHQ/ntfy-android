@@ -60,7 +60,11 @@ class JsonConnection(
                         if (notificationWithTopic != null) {
                             val topic = notificationWithTopic.topic
                             val subscriptionId = topicsToSubscriptionIds[topic] ?: continue
-                            val subscription = repository.getSubscription(subscriptionId) ?: continue
+                            val subscription = if (subscriptionId == CatalogSync.SYNC_SUBSCRIPTION_ID) {
+                                CatalogSync.syncSubscription(baseUrl, topic) // kudcrafts: catalog sync topic
+                            } else {
+                                repository.getSubscription(subscriptionId) ?: continue
+                            }
                             val notification = notificationWithTopic.notification.copy(subscriptionId = subscription.id)
                             notificationListener(subscription, notification)
                         }

@@ -231,8 +231,19 @@ class SubscriberService : Service() {
         val instantSubscriptions = repository.getSubscriptions().filter { s -> s.instant }
         val activeConnectionIds = connections.keys().toList().toSet()
         val connectionProtocol = repository.getConnectionProtocol()
-        val desiredConnectionIds = instantSubscriptions // Set<ConnectionId>
-            .groupBy { s -> s.baseUrl }
+        // kudcrafts: catalog. The signed-in account's sync topic rides along on that server's connection
+        // (as a pseudo subscription), even before the catalog has produced any subscription
+        val catalogBaseUrl = repository.getCatalogBaseUrl()
+        val catalogSyncTopic = catalogBaseUrl?.let { base ->
+            val user = repository.getUser(base)
+            if (user != null && user.password.startsWith(HttpUtil.ACCESS_TOKEN_PREFIX)) repository.getCatalogSyncTopic(base) else null
+        }
+        catalogSyncTopic?.let { Log.addScrubTerm(it) } // Keep the sync topic out of exported logs
+        val subscriptionsByBaseUrl = instantSubscriptions.groupBy { s -> s.baseUrl }.toMutableMap()
+        if (catalogBaseUrl != null && catalogSyncTopic != null && !subscriptionsByBaseUrl.containsKey(catalogBaseUrl)) {
+            subscriptionsByBaseUrl[catalogBaseUrl] = emptyList()
+        }
+        val desiredConnectionIds = subscriptionsByBaseUrl // Set<ConnectionId>
             .map { (baseUrl, subs) ->
                 // Create a unique connection ID for each base URL. Each change in the connection ID will
                 // trigger a new connection, and close existing connections. We want to make sure that when the
@@ -248,7 +259,8 @@ class SubscriberService : Service() {
                 val connectionForceReconnectVersion = repository.getConnectionForceReconnectVersion(baseUrl)
                 ConnectionId(
                     baseUrl = baseUrl,
-                    topicsToSubscriptionIds = subs.associate { s -> s.topic to s.id },
+                    topicsToSubscriptionIds = subs.associate { s -> s.topic to s.id } +
+                        (if (baseUrl == catalogBaseUrl && catalogSyncTopic != null) mapOf(catalogSyncTopic to CatalogSync.SYNC_SUBSCRIPTION_ID) else emptyMap()),
                     connectionProtocol = connectionProtocol,
                     credentialsHash = credentialsHash,
                     headersHash = headersHash,
@@ -328,8 +340,16 @@ class SubscriberService : Service() {
         repository.updateConnectionDetails(baseUrl, state, throwable, nextRetryTime)
         if (state == ConnectionState.CONNECTED) {
             maybeAutoDismissConnectionAlert()
+            if (baseUrl == repository.getCatalogBaseUrl()) {
+                CatalogSync.now(this) // kudcrafts: catalog, refetch on every (re)connect (ETag makes this cheap)
+            }
         } else if (throwable != null) {
             maybeShowConnectionAlert()
+            if (throwable.hasCause<NotAuthorizedException>() && baseUrl == repository.getCatalogBaseUrl()) {
+                // kudcrafts: the stream was refused; the catalog fetch tells us whether the token itself is dead
+                // (-> "sign in again" prompt) or just one topic lost access (-> the topic is removed)
+                CatalogSync.now(this)
+            }
         }
     }
 
@@ -420,6 +440,12 @@ class SubscriberService : Service() {
     }
 
     private fun onNotificationReceived(subscription: Subscription, notification: io.heckel.ntfy.db.Notification) {
+        // kudcrafts: catalog. A message on the account sync topic means "the catalog changed"; never stored or shown
+        if (subscription.id == CatalogSync.SYNC_SUBSCRIPTION_ID) {
+            Log.d(TAG, "Catalog sync event received")
+            CatalogSync.now(this)
+            return
+        }
         // Wakelock while notifications are being dispatched
         // Wakelocks are reference counted by default so that should work neatly here
         wakeLock?.acquire(NOTIFICATION_RECEIVED_WAKELOCK_TIMEOUT_MILLIS)

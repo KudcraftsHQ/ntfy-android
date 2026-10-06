@@ -156,7 +156,11 @@ class WsConnection(
                 val topic = notificationWithTopic.topic
                 val notification = notificationWithTopic.notification
                 val subscriptionId = topicsToSubscriptionIds[topic] ?: return@synchronize
-                val subscription = repository.getSubscription(subscriptionId) ?: return@synchronize
+                val subscription = if (subscriptionId == CatalogSync.SYNC_SUBSCRIPTION_ID) {
+                    CatalogSync.syncSubscription(baseUrl, topic) // kudcrafts: catalog sync topic
+                } else {
+                    repository.getSubscription(subscriptionId) ?: return@synchronize
+                }
                 val notificationWithSubscriptionId = notification.copy(subscriptionId = subscription.id)
                 notificationListener(subscription, notificationWithSubscriptionId)
             }

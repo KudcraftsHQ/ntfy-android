@@ -71,5 +71,16 @@
         <Preference
             app:key="@string/detail_settings_about_topic_url_key"
             app:title="@string/detail_settings_about_topic_url_title"/>
+        <!-- kudcrafts: catalog, read-only -->
+        <Preference
+            app:key="@string/kc_detail_settings_catalog_app_key"
+            app:title="@string/kc_detail_settings_catalog_app_title"
+            app:selectable="false"
+            app:isPreferenceVisible="false"/>
+        <Preference
+            app:key="@string/kc_detail_settings_catalog_sound_key"
+            app:title="@string/kc_detail_settings_catalog_sound_title"
+            app:selectable="false"
+            app:isPreferenceVisible="false"/>
     </PreferenceCategory>
 </PreferenceScreen>

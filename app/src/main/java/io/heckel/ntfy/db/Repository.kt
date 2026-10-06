@@ -18,7 +18,7 @@ import io.heckel.ntfy.util.validUrl
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
-class Repository(private val sharedPrefs: SharedPreferences, database: Database) {
+class Repository(private val sharedPrefs: SharedPreferences, private val database: Database) {
     private val subscriptionDao = database.subscriptionDao()
     private val notificationDao = database.notificationDao()
     private val userDao = database.userDao()
@@ -89,11 +89,141 @@ class Repository(private val sharedPrefs: SharedPreferences, database: Database)
     @Suppress("RedundantSuspendModifier")
     @WorkerThread
     suspend fun updateSubscription(subscription: Subscription) {
-        subscriptionDao.update(subscription)
+        // kudcrafts: catalog. The catalog columns are owned by CatalogSync (updateSubscriptionCatalogFields), so a
+        // screen holding an older copy of the subscription can never write stale catalog data back
+        val current = subscriptionDao.get(subscription.id)
+        val merged = if (current != null) {
+            subscription.copy(
+                managed = current.managed,
+                catalogApp = current.catalogApp,
+                catalogAppName = current.catalogAppName,
+                catalogIcon = current.catalogIcon,
+                catalogSound = current.catalogSound,
+                catalogName = current.catalogName
+            )
+        } else {
+            subscription
+        }
+        subscriptionDao.update(merged)
     }
 
     fun updateSubscriptionIcon(subscriptionId: Long, icon: String?) {
         subscriptionDao.updateSubscriptionIcon(subscriptionId, icon)
+    }
+
+    // kudcrafts: catalog
+
+    fun updateSubscriptionCatalogFields(subscriptionId: Long, fields: CatalogFields) {
+        subscriptionDao.updateCatalogFields(
+            subscriptionId,
+            fields.managed,
+            fields.app,
+            fields.appName,
+            fields.icon,
+            fields.sound,
+            fields.name
+        )
+    }
+
+    fun setCatalogAppMutedUntil(catalogApp: String, mutedUntil: Long) {
+        subscriptionDao.updateMutedUntilForCatalogApp(catalogApp, mutedUntil)
+    }
+
+    /** Base URL of the signed-in Kudcrafts account (the server whose catalog is synced), or null if signed out */
+    fun getCatalogBaseUrl(): String? = sharedPrefs.getString(SHARED_PREFS_CATALOG_BASE_URL, null)
+
+    fun setCatalogBaseUrl(baseUrl: String?) {
+        sharedPrefs.edit {
+            if (baseUrl == null) remove(SHARED_PREFS_CATALOG_BASE_URL) else putString(SHARED_PREFS_CATALOG_BASE_URL, baseUrl)
+        }
+    }
+
+    fun getCatalogEtag(baseUrl: String): String? = sharedPrefs.getString("$SHARED_PREFS_CATALOG_ETAG:$baseUrl", null)
+
+    fun setCatalogEtag(baseUrl: String, etag: String?) {
+        sharedPrefs.edit {
+            if (etag == null) remove("$SHARED_PREFS_CATALOG_ETAG:$baseUrl") else putString("$SHARED_PREFS_CATALOG_ETAG:$baseUrl", etag)
+        }
+    }
+
+    fun getCatalogSyncTopic(baseUrl: String): String? = sharedPrefs.getString("$SHARED_PREFS_CATALOG_SYNC_TOPIC:$baseUrl", null)
+
+    fun setCatalogSyncTopic(baseUrl: String, topic: String?) {
+        sharedPrefs.edit {
+            if (topic.isNullOrEmpty()) remove("$SHARED_PREFS_CATALOG_SYNC_TOPIC:$baseUrl") else putString("$SHARED_PREFS_CATALOG_SYNC_TOPIC:$baseUrl", topic)
+        }
+    }
+
+    /** The catalog icon URL last written into this subscription's icon, or null if the icon is not the catalog's */
+    fun getCatalogIconUrl(subscriptionId: Long): String? = sharedPrefs.getString("$SHARED_PREFS_CATALOG_ICON:$subscriptionId", null)
+
+    fun setCatalogIconUrl(subscriptionId: Long, url: String?) {
+        sharedPrefs.edit {
+            if (url == null) remove("$SHARED_PREFS_CATALOG_ICON:$subscriptionId") else putString("$SHARED_PREFS_CATALOG_ICON:$subscriptionId", url)
+        }
+    }
+
+    /** Subscriptions whose history backfill has not succeeded yet; retried on every sync */
+    fun getCatalogBackfillPending(): Set<Long> {
+        return sharedPrefs.getStringSet(SHARED_PREFS_CATALOG_BACKFILL_PENDING, emptySet())
+            .orEmpty()
+            .mapNotNull { it.toLongOrNull() }
+            .toSet()
+    }
+
+    fun setCatalogBackfillPending(subscriptionId: Long, pending: Boolean) {
+        val current = getCatalogBackfillPending()
+        val updated = if (pending) current + subscriptionId else current - subscriptionId
+        if (updated != current) {
+            sharedPrefs.edit { putStringSet(SHARED_PREFS_CATALOG_BACKFILL_PENDING, updated.map { it.toString() }.toSet()) }
+        }
+    }
+
+    /**
+     * The credentials that were stored for a server before the Kudcrafts sign-in replaced them with a token
+     * (one user per server). Restored on sign-out so hand-added topics on that server keep working.
+     */
+    fun getCatalogPreviousUser(baseUrl: String): User? {
+        val json = sharedPrefs.getString("$SHARED_PREFS_CATALOG_PREVIOUS_USER:$baseUrl", null) ?: return null
+        return try {
+            com.google.gson.Gson().fromJson(json, User::class.java)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun setCatalogPreviousUser(baseUrl: String, user: User?) {
+        sharedPrefs.edit {
+            if (user == null) {
+                remove("$SHARED_PREFS_CATALOG_PREVIOUS_USER:$baseUrl")
+            } else {
+                putString("$SHARED_PREFS_CATALOG_PREVIOUS_USER:$baseUrl", com.google.gson.Gson().toJson(user))
+            }
+        }
+    }
+
+    fun getCatalogHistoryDays(): Int = sharedPrefs.getInt(SHARED_PREFS_CATALOG_HISTORY_DAYS, 0)
+
+    fun setCatalogHistoryDays(days: Int) {
+        sharedPrefs.edit { putInt(SHARED_PREFS_CATALOG_HISTORY_DAYS, days) }
+    }
+
+    fun getCatalogIconRetryTime(): Long = sharedPrefs.getLong(SHARED_PREFS_CATALOG_ICON_RETRY, 0L)
+
+    fun setCatalogIconRetryTime(timeMillis: Long) {
+        sharedPrefs.edit { putLong(SHARED_PREFS_CATALOG_ICON_RETRY, timeMillis) }
+    }
+
+    fun getCatalogAuthError(): Boolean = sharedPrefs.getBoolean(SHARED_PREFS_CATALOG_AUTH_ERROR, false)
+
+    fun setCatalogAuthError(error: Boolean) {
+        sharedPrefs.edit { putBoolean(SHARED_PREFS_CATALOG_AUTH_ERROR, error) }
+    }
+
+    fun getCatalogLastSync(): Long = sharedPrefs.getLong(SHARED_PREFS_CATALOG_LAST_SYNC, 0L)
+
+    fun setCatalogLastSync(timeMillis: Long) {
+        sharedPrefs.edit { putLong(SHARED_PREFS_CATALOG_LAST_SYNC, timeMillis) }
     }
 
     @Suppress("RedundantSuspendModifier")
@@ -101,6 +231,11 @@ class Repository(private val sharedPrefs: SharedPreferences, database: Database)
     suspend fun removeSubscription(subscription: Subscription) {
         notificationDao.removeAll(subscription.id)
         subscriptionDao.remove(subscription.id)
+        if (subscription.managed) {
+            // kudcrafts: catalog. Forget the ETag, so the next sync gets a 200 and can re-add the topic if it is still listed
+            setCatalogEtag(subscription.baseUrl, null)
+            setCatalogBackfillPending(subscription.id, false)
+        }
         updateConnectionDetails(subscription.baseUrl, ConnectionState.NOT_APPLICABLE)
     }
 
@@ -135,6 +270,19 @@ class Repository(private val sharedPrefs: SharedPreferences, database: Database)
     @Suppress("RedundantSuspendModifier")
     @WorkerThread
     suspend fun addNotification(notification: Notification): Boolean {
+        return addNotificationInternal(notification)
+    }
+
+    /** kudcrafts: catalog backfill. Same as [addNotification] for many rows, in one transaction. Returns the added ones. */
+    fun addNotifications(notifications: List<Notification>): List<Notification> {
+        val added = mutableListOf<Notification>()
+        database.runInTransaction {
+            notifications.forEach { if (addNotificationInternal(it)) added.add(it) }
+        }
+        return added
+    }
+
+    private fun addNotificationInternal(notification: Notification): Boolean {
         val maybeExistingNotification = notificationDao.get(notification.id)
         if (maybeExistingNotification != null || notification.event != ApiService.EVENT_MESSAGE) {
             return false
@@ -561,9 +709,16 @@ class Repository(private val sharedPrefs: SharedPreferences, database: Database)
                 upAppId = s.upAppId,
                 upConnectorToken = s.upConnectorToken,
                 displayName = s.displayName,
+                managed = s.managed,
+                catalogApp = s.catalogApp,
+                catalogAppName = s.catalogAppName,
+                catalogIcon = s.catalogIcon,
+                catalogSound = s.catalogSound,
+                catalogName = s.catalogName,
                 totalCount = s.totalCount,
                 newCount = s.newCount,
                 lastActive = s.lastActive,
+            lastMessage = s.lastMessage,
                 connectionDetails = connectionDetails[s.baseUrl] ?: ConnectionDetails()
             )
         }
@@ -588,9 +743,16 @@ class Repository(private val sharedPrefs: SharedPreferences, database: Database)
             upAppId = s.upAppId,
             upConnectorToken = s.upConnectorToken,
             displayName = s.displayName,
+            managed = s.managed,
+            catalogApp = s.catalogApp,
+            catalogAppName = s.catalogAppName,
+            catalogIcon = s.catalogIcon,
+            catalogSound = s.catalogSound,
+            catalogName = s.catalogName,
             totalCount = s.totalCount,
             newCount = s.newCount,
             lastActive = s.lastActive,
+            lastMessage = s.lastMessage,
             connectionDetails = connectionDetails[s.baseUrl] ?: ConnectionDetails()
         )
     }
@@ -666,6 +828,16 @@ class Repository(private val sharedPrefs: SharedPreferences, database: Database)
         const val SHARED_PREFS_CONNECTION_ALERT_SECONDS = "ConnectionAlertSeconds"
         const val SHARED_PREFS_CONNECTION_ALERT_SNOOZE_UNTIL_TIME = "ConnectionAlertSnoozeUntilTime" // Timestamp in millis
         const val SHARED_PREFS_LAST_TOPICS = "LastTopics"
+        const val SHARED_PREFS_CATALOG_BASE_URL = "CatalogBaseUrl" // kudcrafts: catalog
+        const val SHARED_PREFS_CATALOG_ETAG = "CatalogEtag" // + ":<baseUrl>"
+        const val SHARED_PREFS_CATALOG_SYNC_TOPIC = "CatalogSyncTopic" // + ":<baseUrl>"
+        const val SHARED_PREFS_CATALOG_ICON = "CatalogIcon" // + ":<subscriptionId>"
+        const val SHARED_PREFS_CATALOG_AUTH_ERROR = "CatalogAuthError"
+        const val SHARED_PREFS_CATALOG_LAST_SYNC = "CatalogLastSync"
+        const val SHARED_PREFS_CATALOG_BACKFILL_PENDING = "CatalogBackfillPending"
+        const val SHARED_PREFS_CATALOG_PREVIOUS_USER = "CatalogPreviousUser" // + ":<baseUrl>"
+        const val SHARED_PREFS_CATALOG_ICON_RETRY = "CatalogIconRetry"
+        const val SHARED_PREFS_CATALOG_HISTORY_DAYS = "CatalogHistoryDays"
 
         private const val LAST_TOPICS_COUNT = 3
 

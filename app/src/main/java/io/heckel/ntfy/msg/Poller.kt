@@ -26,13 +26,23 @@ class Poller(
     }
 
     /**
+     * kudcrafts: catalog backfill. Polls with an explicit [since] (e.g. "90d") and inserts all messages in one
+     * transaction, oldest first, so the subscription's lastNotificationId ends up on the newest message.
+     */
+    suspend fun backfill(subscription: Subscription, since: String): List<Notification> {
+        val notifications = api.poll(subscription, since)
+        return processNotifications(subscription.id, notifications, batch = true)
+    }
+
+    /**
      * Processes a list of notifications: groups by sequenceId, deletes deleted sequences,
      * and adds only non-deleted latest notifications.
      * Returns the list of notifications that were added.
      */
     private suspend fun processNotifications(
         subscriptionId: Long,
-        notifications: List<Notification>
+        notifications: List<Notification>,
+        batch: Boolean = false
     ): List<Notification> {
         // Group by sequenceId and only keep the latest notification for each sequence
         val latestBySequenceId = notifications
@@ -61,6 +71,9 @@ class Poller(
         // Add only regular message notifications
         val notificationsToAdd = latestBySequenceId
             .filter { it.event == ApiService.EVENT_MESSAGE }
+        if (batch) {
+            return repository.addNotifications(notificationsToAdd.sortedBy { it.timestamp })
+        }
         val addedNotifications = mutableListOf<Notification>()
         notificationsToAdd.forEach { notification ->
             if (repository.addNotification(notification)) {

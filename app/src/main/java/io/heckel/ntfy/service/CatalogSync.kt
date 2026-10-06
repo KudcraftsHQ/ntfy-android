@@ -43,6 +43,8 @@ object CatalogSync {
     const val SYNC_SUBSCRIPTION_ID = -1L
 
     const val ICON_MAX_BYTES = 300 * 1024
+    const val MAX_BACKFILL_DAYS = 90
+    private const val ICON_RETRY_INTERVAL_MILLIS = 24 * 60 * 60 * 1000L
     private const val BACKFILL_ICON_DOWNLOADS = 20
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -203,13 +205,18 @@ object CatalogSync {
         when (val result = CatalogApi(context).fetch(baseUrl, user, repository.getCatalogEtag(baseUrl))) {
             is CatalogResult.NotModified -> {
                 Log.d(TAG, "Catalog not modified")
-                repository.setCatalogAuthError(false)
+                CatalogAuthPrompt.clear(context, repository)
                 repository.setCatalogLastSync(System.currentTimeMillis())
-                retryIcons(context, repository)
+                runPendingBackfills(context, repository)
+                val now = System.currentTimeMillis()
+                if (now - repository.getCatalogIconRetryTime() > ICON_RETRY_INTERVAL_MILLIS) {
+                    retryIcons(context, repository)
+                }
             }
             is CatalogResult.AuthError -> {
+                // Token revoked or expired: never fail silently, ask the user to sign in again
                 Log.w(TAG, "Catalog fetch refused (HTTP ${result.code}); user must sign in again")
-                repository.setCatalogAuthError(true)
+                CatalogAuthPrompt.show(context, repository, user.username)
             }
             is CatalogResult.Failed -> Log.w(TAG, "Catalog fetch failed: ${result.message}")
             is CatalogResult.Ok -> apply(context, repository, baseUrl, result.catalog, result.etag)
@@ -217,13 +224,16 @@ object CatalogSync {
     }
 
     private suspend fun apply(context: Context, repository: Repository, baseUrl: String, catalog: Catalog, etag: String?) {
-        repository.setCatalogAuthError(false)
+        CatalogAuthPrompt.clear(context, repository)
         val plan = reconcile(repository.getSubscriptions(), baseUrl, catalog, ::randomSubscriptionId, System.currentTimeMillis() / 1000)
         Log.d(TAG, "Catalog v${catalog.version}: add ${plan.add.size}, update ${plan.update.size}, remove ${plan.remove.size}")
+        var allAdded = true
         plan.add.forEach { s ->
             try {
                 repository.addSubscription(s)
+                repository.setCatalogBackfillPending(s.id, true)
             } catch (e: Exception) {
+                allAdded = false
                 Log.w(TAG, "Unable to add ${s.topic}: ${e.message}", e)
             }
         }
@@ -232,11 +242,14 @@ object CatalogSync {
 
         val oldSyncTopic = repository.getCatalogSyncTopic(baseUrl)
         repository.setCatalogSyncTopic(baseUrl, catalog.syncTopic)
-        repository.setCatalogEtag(baseUrl, etag) // Only after the plan is applied, so a crash re-fetches
+        repository.setCatalogHistoryDays(catalog.historyDays)
+        // Only after the whole plan is applied: a failed add (or a crash) must not be hidden behind a 304
+        repository.setCatalogEtag(baseUrl, if (allAdded) etag else null)
         repository.setCatalogLastSync(System.currentTimeMillis())
 
-        // History first, then (re)connect: the stream picks up from the newest message we now have
-        plan.add.forEach { s -> backfill(context, repository, s) }
+        // History first, then (re)connect: the stream picks up from the newest message we now have.
+        // A failed backfill stays pending and is retried on the next sync (200 or 304).
+        runPendingBackfills(context, repository)
         retryIcons(context, repository)
         val after = repository.getSubscriptions()
         NotificationService(context).reconcileCatalogChannels(after)
@@ -245,37 +258,77 @@ object CatalogSync {
         }
     }
 
-    private suspend fun backfill(context: Context, repository: Repository, subscription: Subscription) {
-        try {
-            val added = Poller(ApiService(context), repository).poll(subscription) // lastNotificationId == null -> since=all
+    /** "<n>d" for the backfill poll: the server's retention, capped, 90 days if the server reports none */
+    fun backfillSince(historyDays: Int): String {
+        val days = if (historyDays > 0) historyDays.coerceAtMost(MAX_BACKFILL_DAYS) else MAX_BACKFILL_DAYS
+        return "${days}d"
+    }
+
+    private suspend fun runPendingBackfills(context: Context, repository: Repository) {
+        val pending = repository.getCatalogBackfillPending()
+        if (pending.isEmpty()) return
+        val since = backfillSince(repository.getCatalogHistoryDays())
+        pending.forEach { id ->
+            val subscription = repository.getSubscription(id)
+            if (subscription == null) {
+                repository.setCatalogBackfillPending(id, false)
+            } else if (backfill(context, repository, subscription, since)) {
+                repository.setCatalogBackfillPending(id, false)
+            }
+        }
+    }
+
+    private suspend fun backfill(context: Context, repository: Repository, subscription: Subscription, since: String): Boolean {
+        return try {
+            val added = Poller(ApiService(context), repository).backfill(subscription, since) // One transaction
             repository.markAllAsRead(subscription.id) // History is not "new"
             added
                 .filter { it.icon != null }
                 .sortedByDescending { it.timestamp }
                 .take(BACKFILL_ICON_DOWNLOADS)
                 .forEach { DownloadManager.enqueue(context, it.id, userAction = false, DownloadType.ICON) }
-            Log.d(TAG, "Backfilled ${added.size} message(s) for ${subscription.topic}")
+            Log.d(TAG, "Backfilled ${added.size} message(s) for ${subscription.topic} (since=$since)")
+            true
         } catch (e: Exception) {
-            Log.w(TAG, "Backfill failed for ${subscription.topic}: ${e.message}", e)
+            Log.w(TAG, "Backfill failed for ${subscription.topic}, will retry: ${e.message}", e)
+            false
         }
     }
 
+    /** Downloads each app icon URL once per pass (not once per topic) and writes it into every topic that wants it */
     private suspend fun retryIcons(context: Context, repository: Repository) {
+        repository.setCatalogIconRetryTime(System.currentTimeMillis())
+        val downloaded = mutableMapOf<String, ByteArray?>()
         repository.getSubscriptions()
             .filter { it.catalogApp != null && shouldDownloadIcon(it, repository.getCatalogIconUrl(it.id)) }
-            .forEach { downloadIcon(context, repository, it) }
+            .forEach { s ->
+                val url = s.catalogIcon ?: return@forEach
+                val bytes = downloaded.getOrPut(url) { fetchIcon(context, s.baseUrl, url) } ?: return@forEach
+                storeIcon(context, repository, s, url, bytes)
+            }
     }
 
-    private suspend fun downloadIcon(context: Context, repository: Repository, subscription: Subscription) {
-        val url = subscription.catalogIcon ?: return
-        try {
+    private suspend fun fetchIcon(context: Context, baseUrl: String, url: String): ByteArray? {
+        return try {
             val request = HttpUtil.requestBuilder(url).build() // No credentials to third-party hosts
-            val bytes = HttpUtil.defaultClient(context, subscription.baseUrl).newCall(request).execute().use { response ->
+            val client = HttpUtil.defaultClient(context, baseUrl).newBuilder()
+                .followSslRedirects(false) // https only, also after redirects
+                .build()
+            val bytes = client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
                 if (response.body.contentLength() > ICON_MAX_BYTES) throw Exception("Icon larger than $ICON_MAX_BYTES bytes")
                 readAtMost(response.body.byteStream(), ICON_MAX_BYTES)
             }
             if (BitmapFactory.decodeByteArray(bytes, 0, bytes.size) == null) throw Exception("Not an image")
+            bytes
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to download app icon: ${e.message}")
+            null
+        }
+    }
+
+    private suspend fun storeIcon(context: Context, repository: Repository, subscription: Subscription, url: String, bytes: ByteArray) {
+        try {
             val fresh = repository.getSubscription(subscription.id) ?: return
             if (!shouldDownloadIcon(fresh, repository.getCatalogIconUrl(fresh.id))) return // User picked an icon meanwhile
             val dir = File(context.filesDir, SUBSCRIPTION_ICONS)
@@ -286,7 +339,7 @@ object CatalogSync {
             repository.updateSubscriptionIcon(subscription.id, uri.toString())
             repository.setCatalogIconUrl(subscription.id, url)
         } catch (e: Exception) {
-            Log.w(TAG, "Unable to download app icon for ${subscription.topic}: ${e.message}")
+            Log.w(TAG, "Unable to store app icon for ${subscription.topic}: ${e.message}")
         }
     }
 
@@ -306,7 +359,7 @@ object CatalogSync {
 
     private suspend fun removeManagedSubscription(context: Context, repository: Repository, subscription: Subscription) {
         Log.d(TAG, "Removing ${subscription.topic}: no longer in the catalog")
-        repository.removeSubscription(subscription)
+        repository.removeSubscription(subscription) // Also clears the ETag and a pending backfill for managed topics
         if (repository.getCatalogIconUrl(subscription.id) != null) {
             File(File(context.filesDir, SUBSCRIPTION_ICONS), subscription.id.toString()).delete()
             repository.setCatalogIconUrl(subscription.id, null)
@@ -319,11 +372,14 @@ object CatalogSync {
         val token = CatalogApi(context).mintToken(baseUrl, username, password)
         val existing = repository.getUser(baseUrl)
         val user = User(baseUrl, username, token)
+        val wasOurs = repository.getCatalogBaseUrl() == baseUrl && existing?.password?.startsWith(HttpUtil.ACCESS_TOKEN_PREFIX) == true
         if (existing == null) {
             repository.addUser(user)
         } else {
-            if (existing.password.startsWith(HttpUtil.ACCESS_TOKEN_PREFIX) && existing.password != token) {
+            if (wasOurs) {
                 CatalogApi(context).deleteToken(baseUrl, existing) // Do not leave the previous device token behind
+            } else if (repository.getCatalogPreviousUser(baseUrl) == null) {
+                repository.setCatalogPreviousUser(baseUrl, existing) // Hand-added credentials: restored on sign-out
             }
             repository.updateUser(user)
         }
@@ -334,7 +390,7 @@ object CatalogSync {
         repository.setDefaultBaseUrl(baseUrl)
         repository.setCatalogBaseUrl(baseUrl)
         repository.setCatalogEtag(baseUrl, null)
-        repository.setCatalogAuthError(false)
+        CatalogAuthPrompt.clear(context, repository)
         SubscriberServiceManager.refresh(context) // Credentials changed -> reconnect
         now(context)
     }
@@ -348,6 +404,10 @@ object CatalogSync {
             if (user != null && user.password.startsWith(HttpUtil.ACCESS_TOKEN_PREFIX)) {
                 CatalogApi(context).deleteToken(baseUrl, user)
                 repository.deleteUser(baseUrl)
+            }
+            repository.getCatalogPreviousUser(baseUrl)?.let { previousUser ->
+                repository.addUser(previousUser) // Hand-added topics on this server keep their credentials
+                repository.setCatalogPreviousUser(baseUrl, null)
             }
             signOutLocal(context, repository, baseUrl)
         }
@@ -367,7 +427,7 @@ object CatalogSync {
         repository.setCatalogBaseUrl(null)
         repository.setCatalogEtag(baseUrl, null)
         repository.setCatalogSyncTopic(baseUrl, null)
-        repository.setCatalogAuthError(false)
+        CatalogAuthPrompt.clear(context, repository)
         NotificationService(context).reconcileCatalogChannels(repository.getSubscriptions())
     }
 }

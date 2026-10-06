@@ -238,6 +238,7 @@ class SubscriberService : Service() {
             val user = repository.getUser(base)
             if (user != null && user.password.startsWith(HttpUtil.ACCESS_TOKEN_PREFIX)) repository.getCatalogSyncTopic(base) else null
         }
+        catalogSyncTopic?.let { Log.addScrubTerm(it) } // Keep the sync topic out of exported logs
         val subscriptionsByBaseUrl = instantSubscriptions.groupBy { s -> s.baseUrl }.toMutableMap()
         if (catalogBaseUrl != null && catalogSyncTopic != null && !subscriptionsByBaseUrl.containsKey(catalogBaseUrl)) {
             subscriptionsByBaseUrl[catalogBaseUrl] = emptyList()
@@ -344,6 +345,11 @@ class SubscriberService : Service() {
             }
         } else if (throwable != null) {
             maybeShowConnectionAlert()
+            if (throwable.hasCause<NotAuthorizedException>() && baseUrl == repository.getCatalogBaseUrl()) {
+                // kudcrafts: the stream was refused; the catalog fetch tells us whether the token itself is dead
+                // (-> "sign in again" prompt) or just one topic lost access (-> the topic is removed)
+                CatalogSync.now(this)
+            }
         }
     }
 

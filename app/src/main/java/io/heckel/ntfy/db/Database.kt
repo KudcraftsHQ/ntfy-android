@@ -169,7 +169,10 @@ data class SubscriptionWithMetadata(
     val lastActive: Long
 )
 
-@Entity(primaryKeys = ["id", "subscriptionId"])
+@Entity(
+    primaryKeys = ["id", "subscriptionId"],
+    indices = [Index(value = ["subscriptionId", "timestamp"])] // kudcrafts: list/backfill/prune per topic with 90 days of history
+)
 data class Notification(
     @ColumnInfo(name = "id") val id: String,
     @ColumnInfo(name = "subscriptionId") val subscriptionId: Long,
@@ -514,9 +517,11 @@ abstract class Database : RoomDatabase() {
             }
         }
 
-        // kudcrafts: catalog. Additive only, so an older build of this fork can still be reinstalled over it
+        // kudcrafts: catalog. Additive (new columns + an index), so existing data survives the upgrade. Note that a
+        // DOWNGRADE to a build with Room version 18 is destructive (fallbackToDestructiveMigration above wipes the DB).
         val MIGRATION_18_19 = object : Migration(18, 19) {
             override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_Notification_subscriptionId_timestamp ON Notification (subscriptionId, timestamp)")
                 db.execSQL("ALTER TABLE Subscription ADD COLUMN managed INTEGER NOT NULL DEFAULT (0)")
                 db.execSQL("ALTER TABLE Subscription ADD COLUMN catalogApp TEXT")
                 db.execSQL("ALTER TABLE Subscription ADD COLUMN catalogAppName TEXT")

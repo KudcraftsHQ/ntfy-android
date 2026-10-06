@@ -74,6 +74,10 @@ class CatalogLoginDialog : DialogFragment() {
             serverLayout.error = getString(R.string.kc_login_dialog_error_server)
             return
         }
+        if (!server.lowercase().startsWith("https://")) {
+            serverLayout.error = getString(R.string.kc_login_dialog_error_https) // Password and token never travel in clear text
+            return
+        }
         if (username.isEmpty()) {
             usernameLayout.error = getString(R.string.kc_login_dialog_error_username)
             return

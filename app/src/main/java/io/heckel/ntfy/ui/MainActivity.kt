@@ -404,6 +404,7 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
     override fun onResume() {
         super.onResume()
         CatalogSync.now(this) // kudcrafts: catalog (no-op when not signed in)
+        showHideCatalogAuthSnackbar()
         showHideNotificationMenuItems()
         showHideConnectionErrorMenuItem(repository.getConnectionDetails())
         showHideNoNetworkBanner()
@@ -493,6 +494,17 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
             }
             startActivity(intent)
         }
+    }
+
+    // kudcrafts: the server refused the account token; don't let notifications stop silently
+    private fun showHideCatalogAuthSnackbar() {
+        if (repository.getCatalogBaseUrl() == null || !repository.getCatalogAuthError()) return
+        com.google.android.material.snackbar.Snackbar
+            .make(findViewById(android.R.id.content), R.string.kc_main_auth_snackbar, com.google.android.material.snackbar.Snackbar.LENGTH_INDEFINITE)
+            .setAction(R.string.kc_main_auth_snackbar_action) {
+                startActivity(Intent(this, SettingsActivity::class.java))
+            }
+            .show()
     }
 
     private fun setCatalogAppMutedUntil(app: String, mutedUntilTimestamp: Long) {

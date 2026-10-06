@@ -237,6 +237,33 @@ class CatalogSyncTest {
     }
 
     @Test
+    fun tokenRequestNeverExpires() {
+        // Review blocker: without "expires": 0 the server mints a 72 h token and the phone goes dark on day 3
+        val json = com.google.gson.JsonParser.parseString(CatalogApi.tokenRequestJson("android-Pixel 8-a1b2c3")).asJsonObject
+        assertEquals("android-Pixel 8-a1b2c3", json.get("label").asString)
+        assertTrue(json.has("expires"))
+        assertEquals(0L, json.get("expires").asLong)
+        assertEquals(2, json.size())
+    }
+
+    @Test
+    fun tokenLabelIsPerDevice() {
+        assertEquals("android-Pixel 8-a1b2c3", CatalogApi.tokenLabel("Pixel 8", "a1b2c3"))
+        assertEquals("android-Pixel 8", CatalogApi.tokenLabel("Pixel 8", null))
+        assertEquals("android-device", CatalogApi.tokenLabel("  ", ""))
+        assertTrue(CatalogApi.tokenLabel("x".repeat(500), "abcdef").length <= 127)
+    }
+
+    @Test
+    fun backfillUsesServerRetentionNotSinceAll() {
+        assertEquals("90d", CatalogSync.backfillSince(90))
+        assertEquals("30d", CatalogSync.backfillSince(30))
+        assertEquals("90d", CatalogSync.backfillSince(0)) // Server reported none (12 h default) -> our cap, never "all"
+        assertEquals("90d", CatalogSync.backfillSince(365)) // Capped
+        assertEquals("1d", CatalogSync.backfillSince(1))
+    }
+
+    @Test
     fun parsingRejectsGarbage() {
         assertNull(CatalogApi.parseCatalog("not json"))
         assertEquals("tk_abc", CatalogApi.parseToken("""{"token":"tk_abc","last_access":1}"""))

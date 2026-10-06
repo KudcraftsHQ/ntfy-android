@@ -2,6 +2,7 @@ package io.heckel.ntfy.msg
 
 import android.content.Context
 import android.os.Build
+import android.provider.Settings
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import io.heckel.ntfy.db.Repository
@@ -55,7 +56,7 @@ class CatalogApi(private val context: Context) {
     suspend fun mintToken(baseUrl: String, username: String, password: String): String {
         val url = "$baseUrl/v1/account/token"
         val basicUser = User(baseUrl, username, password)
-        val body = Gson().toJson(mapOf("label" to tokenLabel())).toRequestBody(JSON)
+        val body = tokenRequestJson(tokenLabel()).toRequestBody(JSON)
         val request = HttpUtil.requestBuilder(url, null, repository.getCustomHeaders(baseUrl))
             .header("Authorization", okhttp3.Credentials.basic(username, password, Charsets.UTF_8))
             .post(body)
@@ -90,8 +91,15 @@ class CatalogApi(private val context: Context) {
         }
     }
 
+    /** Per-device label, so each phone's token can be told apart (and revoked) in the web app's Account -> Tokens */
+    @Suppress("HardwareIds")
     private fun tokenLabel(): String {
-        return "android-${Build.MODEL}".take(200)
+        val deviceId = try {
+            Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)?.take(6)
+        } catch (e: Exception) {
+            null
+        }
+        return tokenLabel(Build.MODEL, deviceId)
     }
 
     companion object {
@@ -106,6 +114,20 @@ class CatalogApi(private val context: Context) {
             } catch (e: Exception) {
                 null
             }
+        }
+
+        /**
+         * Body for POST /v1/account/token. "expires": 0 = never: without it the server defaults to 72 h and,
+         * since the password is not kept, the phone would go dark on day 3. The token stays revocable.
+         */
+        fun tokenRequestJson(label: String): String {
+            return gson.toJson(linkedMapOf<String, Any>("label" to label, "expires" to 0))
+        }
+
+        fun tokenLabel(model: String?, deviceId: String?): String {
+            val cleanModel = (model ?: "").trim().ifEmpty { "device" }
+            val suffix = deviceId?.trim()?.takeIf { it.isNotEmpty() }?.let { "-$it" } ?: ""
+            return ("android-$cleanModel".take(120) + suffix)
         }
 
         fun parseToken(json: String): String? {

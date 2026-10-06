@@ -18,7 +18,7 @@ import io.heckel.ntfy.util.validUrl
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
-class Repository(private val sharedPrefs: SharedPreferences, database: Database) {
+class Repository(private val sharedPrefs: SharedPreferences, private val database: Database) {
     private val subscriptionDao = database.subscriptionDao()
     private val notificationDao = database.notificationDao()
     private val userDao = database.userDao()
@@ -163,6 +163,57 @@ class Repository(private val sharedPrefs: SharedPreferences, database: Database)
         }
     }
 
+    /** Subscriptions whose history backfill has not succeeded yet; retried on every sync */
+    fun getCatalogBackfillPending(): Set<Long> {
+        return sharedPrefs.getStringSet(SHARED_PREFS_CATALOG_BACKFILL_PENDING, emptySet())
+            .orEmpty()
+            .mapNotNull { it.toLongOrNull() }
+            .toSet()
+    }
+
+    fun setCatalogBackfillPending(subscriptionId: Long, pending: Boolean) {
+        val current = getCatalogBackfillPending()
+        val updated = if (pending) current + subscriptionId else current - subscriptionId
+        if (updated != current) {
+            sharedPrefs.edit { putStringSet(SHARED_PREFS_CATALOG_BACKFILL_PENDING, updated.map { it.toString() }.toSet()) }
+        }
+    }
+
+    /**
+     * The credentials that were stored for a server before the Kudcrafts sign-in replaced them with a token
+     * (one user per server). Restored on sign-out so hand-added topics on that server keep working.
+     */
+    fun getCatalogPreviousUser(baseUrl: String): User? {
+        val json = sharedPrefs.getString("$SHARED_PREFS_CATALOG_PREVIOUS_USER:$baseUrl", null) ?: return null
+        return try {
+            com.google.gson.Gson().fromJson(json, User::class.java)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun setCatalogPreviousUser(baseUrl: String, user: User?) {
+        sharedPrefs.edit {
+            if (user == null) {
+                remove("$SHARED_PREFS_CATALOG_PREVIOUS_USER:$baseUrl")
+            } else {
+                putString("$SHARED_PREFS_CATALOG_PREVIOUS_USER:$baseUrl", com.google.gson.Gson().toJson(user))
+            }
+        }
+    }
+
+    fun getCatalogHistoryDays(): Int = sharedPrefs.getInt(SHARED_PREFS_CATALOG_HISTORY_DAYS, 0)
+
+    fun setCatalogHistoryDays(days: Int) {
+        sharedPrefs.edit { putInt(SHARED_PREFS_CATALOG_HISTORY_DAYS, days) }
+    }
+
+    fun getCatalogIconRetryTime(): Long = sharedPrefs.getLong(SHARED_PREFS_CATALOG_ICON_RETRY, 0L)
+
+    fun setCatalogIconRetryTime(timeMillis: Long) {
+        sharedPrefs.edit { putLong(SHARED_PREFS_CATALOG_ICON_RETRY, timeMillis) }
+    }
+
     fun getCatalogAuthError(): Boolean = sharedPrefs.getBoolean(SHARED_PREFS_CATALOG_AUTH_ERROR, false)
 
     fun setCatalogAuthError(error: Boolean) {
@@ -180,6 +231,11 @@ class Repository(private val sharedPrefs: SharedPreferences, database: Database)
     suspend fun removeSubscription(subscription: Subscription) {
         notificationDao.removeAll(subscription.id)
         subscriptionDao.remove(subscription.id)
+        if (subscription.managed) {
+            // kudcrafts: catalog. Forget the ETag, so the next sync gets a 200 and can re-add the topic if it is still listed
+            setCatalogEtag(subscription.baseUrl, null)
+            setCatalogBackfillPending(subscription.id, false)
+        }
         updateConnectionDetails(subscription.baseUrl, ConnectionState.NOT_APPLICABLE)
     }
 
@@ -214,6 +270,19 @@ class Repository(private val sharedPrefs: SharedPreferences, database: Database)
     @Suppress("RedundantSuspendModifier")
     @WorkerThread
     suspend fun addNotification(notification: Notification): Boolean {
+        return addNotificationInternal(notification)
+    }
+
+    /** kudcrafts: catalog backfill. Same as [addNotification] for many rows, in one transaction. Returns the added ones. */
+    fun addNotifications(notifications: List<Notification>): List<Notification> {
+        val added = mutableListOf<Notification>()
+        database.runInTransaction {
+            notifications.forEach { if (addNotificationInternal(it)) added.add(it) }
+        }
+        return added
+    }
+
+    private fun addNotificationInternal(notification: Notification): Boolean {
         val maybeExistingNotification = notificationDao.get(notification.id)
         if (maybeExistingNotification != null || notification.event != ApiService.EVENT_MESSAGE) {
             return false
@@ -765,6 +834,10 @@ class Repository(private val sharedPrefs: SharedPreferences, database: Database)
         const val SHARED_PREFS_CATALOG_ICON = "CatalogIcon" // + ":<subscriptionId>"
         const val SHARED_PREFS_CATALOG_AUTH_ERROR = "CatalogAuthError"
         const val SHARED_PREFS_CATALOG_LAST_SYNC = "CatalogLastSync"
+        const val SHARED_PREFS_CATALOG_BACKFILL_PENDING = "CatalogBackfillPending"
+        const val SHARED_PREFS_CATALOG_PREVIOUS_USER = "CatalogPreviousUser" // + ":<baseUrl>"
+        const val SHARED_PREFS_CATALOG_ICON_RETRY = "CatalogIconRetry"
+        const val SHARED_PREFS_CATALOG_HISTORY_DAYS = "CatalogHistoryDays"
 
         private const val LAST_TOPICS_COUNT = 3
 

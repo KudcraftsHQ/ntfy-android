@@ -44,6 +44,14 @@
     <string name="kc_settings_sync_now_summary_never">Not synced yet</string>
     <string name="kc_settings_sync_now_toast">Syncing apps and topics …</string>
 
+    <!-- Token refused (revoked or expired) -->
+    <string name="kc_auth_channel_name">Kudcrafts account</string>
+    <string name="kc_auth_notification_title">Sign in again to keep getting notifications</string>
+    <string name="kc_auth_notification_text">The server no longer accepts this phone\'s sign-in for %1$s. Tap to sign in again.</string>
+    <string name="kc_main_auth_snackbar">Kudcrafts sign-in expired. Notifications have stopped.</string>
+    <string name="kc_main_auth_snackbar_action">Sign in</string>
+    <string name="kc_login_dialog_error_https">The server must use https://</string>
+
     <!-- Sign-in dialog -->
     <string name="kc_login_dialog_title">Sign in to Kudcrafts</string>
     <string name="kc_login_dialog_description">Your password is used once to create a token for this phone. It is not stored.</string>

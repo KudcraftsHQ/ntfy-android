@@ -83,6 +83,7 @@ class DetailActivity : AppCompatActivity(), NotificationFragment.NotificationSet
     private var subscriptionTopic: String = "" // Set in onCreate()
     private var subscriptionDisplayName: String = "" // Set in onCreate() & updated by options menu!
     private var subscriptionMutedUntil: Long = 0L // Set in onCreate() & updated by options menu!
+    @Volatile private var subscriptionManaged = false // kudcrafts: catalog topics cannot be unsubscribed here
 
     // UI elements
     private lateinit var adapter: DetailAdapter
@@ -653,7 +654,15 @@ class DetailActivity : AppCompatActivity(), NotificationFragment.NotificationSet
             menu.findItem(R.id.detail_menu_settings)?.isVisible = !isSearchActive
             menu.findItem(R.id.detail_menu_clear)?.isVisible = !isSearchActive
             menu.findItem(R.id.detail_menu_test)?.isVisible = !isSearchActive
-            menu.findItem(R.id.detail_menu_unsubscribe)?.isVisible = !isSearchActive
+            menu.findItem(R.id.detail_menu_unsubscribe)?.isVisible = !isSearchActive && !subscriptionManaged
+        }
+        // kudcrafts: catalog. A managed topic would only come back on the next sync, so hide "Unsubscribe"
+        lifecycleScope.launch(Dispatchers.IO) {
+            val managed = repository.getSubscription(subscriptionId)?.managed == true
+            if (managed != subscriptionManaged) {
+                subscriptionManaged = managed
+                runOnUiThread { menu.findItem(R.id.detail_menu_unsubscribe)?.isVisible = !isSearchActive && !managed }
+            }
         }
     }
 
@@ -908,6 +917,10 @@ class DetailActivity : AppCompatActivity(), NotificationFragment.NotificationSet
 
     private fun onDeleteClick() {
         Log.d(TAG, "Deleting subscription ${topicShortUrl(subscriptionBaseUrl, subscriptionTopic)}")
+        if (subscriptionManaged) {
+            Toast.makeText(this, getString(R.string.kc_main_delete_managed_skipped, 1), Toast.LENGTH_LONG).show()
+            return
+        }
 
         val dialog = MaterialAlertDialogBuilder(this)
             .setMessage(R.string.detail_delete_dialog_message)

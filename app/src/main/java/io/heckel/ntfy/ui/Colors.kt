@@ -9,6 +9,9 @@ import io.heckel.ntfy.util.isDarkThemeOn
 
 class Colors {
     companion object {
+        /** kudcrafts: the fdroid flavor wears the web app's flat, ink-on-canvas look (see src/fdroid/res/values/kc_theme.xml) */
+        private val KUDCRAFTS_THEME = io.heckel.ntfy.BuildConfig.FLAVOR == "fdroid"
+
         fun primary(context: Context): Int {
             return MaterialColors.getColor(context, R.attr.colorPrimary, Color.GREEN)
         }
@@ -30,6 +33,7 @@ class Colors {
         }
 
         fun cardBackgroundColor(context: Context): Int {
+            if (KUDCRAFTS_THEME) return MaterialColors.getColor(context, R.attr.colorSurface, Color.WHITE) // Flat rows
             return if (isDarkThemeOn(context)) {
                 MaterialColors.getColor(context, R.attr.colorSurfaceContainer, Color.GRAY)
             } else {
@@ -38,6 +42,7 @@ class Colors {
         }
 
         fun cardSelectedBackgroundColor(context: Context): Int {
+            if (KUDCRAFTS_THEME) return MaterialColors.getColor(context, R.attr.colorSurfaceContainerHigh, Color.GRAY)
             return if (isDarkThemeOn(context)) {
                 MaterialColors.getColor(context, R.attr.colorSurfaceContainerHigh, Color.GRAY)
             } else {
@@ -56,11 +61,13 @@ class Colors {
         }
 
         fun shouldUseLightStatusBar(dynamicColors: Boolean, darkMode: Boolean): Boolean {
+            if (KUDCRAFTS_THEME) return !darkMode // Light canvas toolbar -> dark status bar icons
             // Use light status bar (dark icons) when dynamic colors are enabled in light mode
             return dynamicColors && !darkMode
         }
 
         fun toolbarTextColor(context: Context, dynamicColors: Boolean, darkMode: Boolean): Int {
+            if (KUDCRAFTS_THEME) return MaterialColors.getColor(context, R.attr.colorOnSurface, Color.BLACK) // Ink on canvas
             return if (dynamicColors) {
                 // Use colorOnSurface (dark on light, light on dark) when dynamic colors are enabled
                 MaterialColors.getColor(context, R.attr.colorOnSurface, Color.BLACK)

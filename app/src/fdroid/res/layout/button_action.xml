@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- kudcrafts: action buttons as soft pills (web "Resolve"), fdroid flavor -->
+<com.google.android.material.button.MaterialButton
+        xmlns:android="http://schemas.android.com/apk/res/android"
+        style="@style/Widget.Kc.Button.Pill"
+        android:id="@+id/button"
+        android:text="Button"
+        android:layout_margin="0dp"
+        android:layout_width="wrap_content"
+        android:layout_height="36dp"
+        android:minWidth="0dp"
+        android:minHeight="0dp"
+        android:insetBottom="0dp"
+        android:insetTop="0dp"
+        android:insetLeft="0dp"
+        android:insetRight="0dp"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:textSize="14sp"/>

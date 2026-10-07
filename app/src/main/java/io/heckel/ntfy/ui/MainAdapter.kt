@@ -38,7 +38,8 @@ class MainAdapter(
      */
     sealed class Item {
         data class Header(val app: String?, val name: String, val icon: String?, val unread: Int) : Item()
-        data class Row(val subscription: Subscription) : Item()
+        /** child = a topic under its app's header; asApp = the only topic of an app, shown as the app itself */
+        data class Row(val subscription: Subscription, val child: Boolean = false, val asApp: Boolean = false) : Item()
     }
 
     fun submitSubscriptions(subscriptions: List<Subscription>, otherLabel: String) {
@@ -68,7 +69,7 @@ class MainAdapter(
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (val item = getItem(position)) {
             is Item.Header -> (holder as AppHeaderViewHolder).bind(item)
-            is Item.Row -> (holder as SubscriptionViewHolder).bind(item.subscription)
+            is Item.Row -> (holder as SubscriptionViewHolder).bind(item.subscription, item.child, item.asApp)
         }
     }
 
@@ -111,7 +112,7 @@ class MainAdapter(
         private val newItemsView: TextView = itemView.findViewById(R.id.main_item_new)
         private val appBaseUrl = context.getString(R.string.app_base_url)
 
-        fun bind(subscription: Subscription) {
+        fun bind(subscription: Subscription, child: Boolean = false, asApp: Boolean = false) {
             this.subscription = subscription
             val isUnifiedPush = subscription.upAppId != null
             var statusMessage = if (isUnifiedPush) {
@@ -140,18 +141,28 @@ class MainAdapter(
             val globalMutedUntil = repository.getGlobalMutedUntil()
             val showMutedForeverIcon = (subscription.mutedUntil == 1L || globalMutedUntil == 1L) && !isUnifiedPush
             val showMutedUntilIcon = !showMutedForeverIcon && (subscription.mutedUntil > 1L || globalMutedUntil > 1L) && !isUnifiedPush
-            if (subscription.icon != null) {
-                imageView.setImageBitmap(subscription.icon.readBitmapFromUriOrNull(context))
+            val name = if (asApp) {
+                subscription.displayName ?: subscription.catalogAppName ?: displayName(appBaseUrl, subscription)
+            } else {
+                displayName(appBaseUrl, subscription)
+            }
+            val iconBitmap = subscription.icon?.readBitmapFromUriOrNull(context)
+            if (KcStyle.enabled) {
+                // kudcrafts: child topics sit under their app's icon; everything else gets its icon or a letter avatar
+                imageView.visibility = if (child) View.INVISIBLE else View.VISIBLE
+                imageView.setImageBitmap(iconBitmap ?: KcStyle.letterAvatar(context, subscription.catalogAppName ?: name, 120))
+            } else if (iconBitmap != null) {
+                imageView.setImageBitmap(iconBitmap)
             } else {
                 imageView.setImageResource(R.drawable.ic_sms_gray_24dp)
             }
-            nameView.text = displayName(appBaseUrl, subscription)
-            statusView.text = if (subscription.catalogApp != null && !subscription.lastMessage.isNullOrBlank()) {
+            nameView.text = name
+            statusView.text = if ((subscription.catalogApp != null || KcStyle.enabled) && !subscription.lastMessage.isNullOrBlank()) {
                 subscription.lastMessage.lineSequence().first() // kudcrafts: catalog rows show the last message
             } else {
                 statusMessage
             }
-            dateView.text = dateText
+            dateView.text = if (KcStyle.enabled) KcStyle.relativeTime(subscription.lastActive, context = context) else dateText
             dateView.visibility = View.VISIBLE
             val showConnectionError = subscription.instant && subscription.connectionDetails.hasError()
             connectionErrorImageView.visibility = if (showConnectionError) View.VISIBLE else View.GONE
@@ -163,8 +174,10 @@ class MainAdapter(
             } else {
                 newItemsView.visibility = View.VISIBLE
                 newItemsView.text = if (subscription.newCount <= 99) subscription.newCount.toString() else "99+"
-                newItemsView.setTextColor(onPrimaryColor)
-                newItemsView.background = countDrawable
+                if (!KcStyle.enabled) { // kudcrafts: the fdroid layout draws "• 3" (dot + count) instead of a filled badge
+                    newItemsView.setTextColor(onPrimaryColor)
+                    newItemsView.background = countDrawable
+                }
             }
             itemView.setOnClickListener { onClick(subscription) }
             itemView.setOnLongClickListener { onLongClick(subscription); true }
@@ -201,6 +214,7 @@ class MainAdapter(
             if (catalog.isEmpty()) {
                 return other.map { Item.Row(it) }
             }
+            val headerPerApp = !KcStyle.enabled // kudcrafts look: a one-topic app is a single row, like the web sidebar
             val items = mutableListOf<Item>()
             catalog
                 .groupBy { it.catalogApp!! }
@@ -209,8 +223,12 @@ class MainAdapter(
                 .forEach { (app, subs) ->
                     val name = subs.first().catalogAppName ?: app
                     val icon = subs.firstNotNullOfOrNull { it.icon }
-                    items.add(Item.Header(app, name, icon, subs.sumOf { it.newCount }))
-                    subs.forEach { items.add(Item.Row(it)) }
+                    if (subs.size == 1 && !headerPerApp) {
+                        items.add(Item.Row(subs.single(), asApp = true))
+                    } else {
+                        items.add(Item.Header(app, name, icon, subs.sumOf { it.newCount }))
+                        subs.forEach { items.add(Item.Row(it, child = !headerPerApp)) }
+                    }
                 }
             if (other.isNotEmpty()) {
                 items.add(Item.Header(null, otherLabel, null, other.sumOf { it.newCount }))

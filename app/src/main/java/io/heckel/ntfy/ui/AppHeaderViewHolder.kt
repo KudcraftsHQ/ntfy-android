@@ -34,6 +34,19 @@ class AppHeaderViewHolder(itemView: View, private val actions: Actions?) : Recyc
             ""
         }
         val bitmap = header.icon?.readBitmapFromUriOrNull(context)
+            ?: if (KcStyle.enabled && header.app != null) KcStyle.letterAvatar(context, header.name, 120) else null
+        if (KcStyle.enabled && header.app == null) {
+            // kudcrafts: "Other" is a quiet section label, like the web sidebar's "Apps"
+            nameView.text = header.name.uppercase()
+            nameView.textSize = 12f
+            nameView.letterSpacing = 0.06f
+            nameView.setTextColor(context.getColor(R.color.kc_ink_3))
+        } else if (KcStyle.enabled) {
+            nameView.textSize = 15.5f
+            nameView.letterSpacing = 0f
+            nameView.setTextColor(context.getColor(R.color.kc_ink))
+        }
+        unreadView.visibility = if (header.unread > 0) View.VISIBLE else View.GONE
         if (bitmap != null) {
             iconView.setImageBitmap(bitmap)
             iconView.visibility = View.VISIBLE

@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- kudcrafts: type scale, shapes and components of the web app's look. Applied by the fdroid theme (src/fdroid/res/values/kc_theme.xml). -->
+<resources>
+    <!-- Type scale (web: 14.5px base, -0.003em tracking; serif only for the big moments) -->
+    <style name="TextAppearance.Kc.Display" parent="TextAppearance.Material3.DisplaySmall">
+        <item name="fontFamily">@font/instrument_serif</item>
+        <item name="android:fontFamily">@font/instrument_serif</item>
+        <item name="android:textSize">36sp</item>
+        <item name="android:letterSpacing">-0.01</item>
+        <item name="android:textColor">@color/kc_ink</item>
+    </style>
+    <style name="TextAppearance.Kc.Headline" parent="TextAppearance.Material3.HeadlineSmall">
+        <item name="fontFamily">@font/instrument_sans</item>
+        <item name="android:fontFamily">@font/instrument_sans</item>
+        <item name="android:textSize">24sp</item>
+        <item name="android:letterSpacing">-0.015</item>
+        <item name="android:textColor">@color/kc_ink</item>
+    </style>
+    <style name="TextAppearance.Kc.TitleLarge" parent="TextAppearance.Material3.TitleLarge">
+        <item name="fontFamily">@font/instrument_sans</item>
+        <item name="android:fontFamily">@font/instrument_sans</item>
+        <item name="android:textSize">19sp</item>
+        <item name="android:textFontWeight">600</item>
+        <item name="android:letterSpacing">-0.01</item>
+    </style>
+    <style name="TextAppearance.Kc.Title" parent="TextAppearance.Material3.TitleMedium">
+        <item name="fontFamily">@font/instrument_sans</item>
+        <item name="android:fontFamily">@font/instrument_sans</item>
+        <item name="android:textSize">15.5sp</item>
+        <item name="android:textFontWeight">600</item>
+    </style>
+    <style name="TextAppearance.Kc.TitleSmall" parent="TextAppearance.Material3.TitleSmall">
+        <item name="fontFamily">@font/instrument_sans</item>
+        <item name="android:fontFamily">@font/instrument_sans</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textFontWeight">600</item>
+    </style>
+    <style name="TextAppearance.Kc.Body" parent="TextAppearance.Material3.BodyLarge">
+        <item name="fontFamily">@font/instrument_sans</item>
+        <item name="android:fontFamily">@font/instrument_sans</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:letterSpacing">-0.003</item>
+    </style>
+    <style name="TextAppearance.Kc.Small" parent="TextAppearance.Material3.BodySmall">
+        <item name="fontFamily">@font/instrument_sans</item>
+        <item name="android:fontFamily">@font/instrument_sans</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/kc_ink_3</item>
+    </style>
+    <style name="TextAppearance.Kc.Label" parent="TextAppearance.Material3.LabelLarge">
+        <item name="fontFamily">@font/instrument_sans</item>
+        <item name="android:fontFamily">@font/instrument_sans</item>
+        <item name="android:textSize">14.5sp</item>
+        <item name="android:textFontWeight">500</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
+    <style name="TextAppearance.Kc.ToolbarTitle" parent="TextAppearance.Material3.TitleLarge">
+        <item name="fontFamily">@font/instrument_sans</item>
+        <item name="android:fontFamily">@font/instrument_sans</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:textFontWeight">600</item>
+        <item name="android:letterSpacing">-0.01</item>
+    </style>
+    <style name="ShapeAppearance.Kc.Small" parent="ShapeAppearance.Material3.Corner.Small">
+        <item name="cornerSize">8dp</item>
+    </style>
+    <style name="ShapeAppearance.Kc.Medium" parent="ShapeAppearance.Material3.Corner.Medium">
+        <item name="cornerSize">12dp</item>
+    </style>
+    <style name="ShapeAppearance.Kc.Large" parent="ShapeAppearance.Material3.Corner.Large">
+        <item name="cornerSize">16dp</item>
+    </style>
+    <style name="ShapeAppearance.Kc.Pill" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
+    </style>
+    <style name="ShapeAppearance.Kc.Circle" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
+    </style>
+    <style name="Widget.Kc.Toolbar" parent="Widget.Material3.Toolbar">
+        <item name="titleTextAppearance">@style/TextAppearance.Kc.ToolbarTitle</item>
+        <item name="subtitleTextAppearance">@style/TextAppearance.Kc.Small</item>
+    </style>
+    <!-- Buttons: pills. Filled accent for the primary action, soft pill for the rest (web "Open link" / "Resolve") -->
+    <style name="Widget.Kc.Button" parent="Widget.Material3.Button">
+        <item name="shapeAppearance">@style/ShapeAppearance.Kc.Pill</item>
+        <item name="android:textAppearance">@style/TextAppearance.Kc.Label</item>
+        <item name="backgroundTint">@color/kc_accent</item>
+        <item name="android:textColor">@color/kc_on_accent</item>
+        <item name="iconTint">@color/kc_on_accent</item>
+        <item name="android:paddingStart">18dp</item>
+        <item name="android:paddingEnd">18dp</item>
+        <item name="elevation">0dp</item>
+    </style>
+    <style name="Widget.Kc.Button.Pill" parent="Widget.Material3.Button.TonalButton">
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Kc.Pill</item>
+        <item name="android:textAppearance">@style/TextAppearance.Kc.Label</item>
+        <item name="backgroundTint">@color/kc_pill</item>
+        <item name="android:textColor">@color/kc_ink</item>
+        <item name="iconTint">@color/kc_ink</item>
+        <item name="rippleColor">@color/kc_active</item>
+        <item name="elevation">0dp</item>
+    </style>
+    <style name="Widget.Kc.Button.Text" parent="Widget.Material3.Button.TextButton">
+        <item name="android:textAppearance">@style/TextAppearance.Kc.Label</item>
+        <item name="android:textColor">@color/kc_accent_ink</item>
+    </style>
+    <style name="ThemeOverlay.Kc.Dialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.Kc.Large</item>
+        <item name="colorSurface">@color/kc_panel</item>
+        <item name="colorSurfaceContainerHigh">@color/kc_panel</item>
+        <item name="buttonBarPositiveButtonStyle">@style/Widget.Kc.Button.Text</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Widget.Kc.Button.Text</item>
+        <item name="buttonBarNeutralButtonStyle">@style/Widget.Kc.Button.Text</item>
+        <item name="materialAlertDialogTitleTextStyle">@style/Widget.Kc.DialogTitle</item>
+    </style>
+    <style name="Widget.Kc.DialogTitle" parent="MaterialAlertDialog.Material3.Title.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Kc.TitleLarge</item>
+    </style>
+    <style name="Widget.Kc.TextInput" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="boxCornerRadiusTopStart">10dp</item>
+        <item name="boxCornerRadiusTopEnd">10dp</item>
+        <item name="boxCornerRadiusBottomStart">10dp</item>
+        <item name="boxCornerRadiusBottomEnd">10dp</item>
+        <item name="boxStrokeColor">@color/kc_input_stroke</item>
+        <item name="boxBackgroundColor">@color/kc_raised</item>
+        <item name="hintTextColor">@color/kc_accent_ink</item>
+    </style>
+    <style name="Widget.Kc.Chip" parent="Widget.Material3.Chip.Filter">
+        <item name="chipBackgroundColor">@color/kc_pill</item>
+        <item name="chipStrokeColor">@color/kc_line_strong</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Kc.Pill</item>
+    </style>
+    <style name="Widget.Kc.PopupMenu" parent="Widget.Material3.PopupMenu">
+        <item name="android:popupBackground">@drawable/kc_popup_background</item>
+    </style>
+    <style name="TextAppearance.Kc.Masthead" parent="TextAppearance.Material3.TitleLarge">
+        <item name="fontFamily">@font/instrument_serif</item>
+        <item name="android:fontFamily">@font/instrument_serif</item>
+        <item name="android:textSize">30sp</item>
+        <item name="android:letterSpacing">-0.01</item>
+    </style>
+    <style name="Widget.Kc.FieldLabel" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginBottom">6dp</item>
+        <item name="android:textAppearance">@style/TextAppearance.Kc.Small</item>
+        <item name="android:textSize">13.5sp</item>
+        <item name="android:textColor">@color/kc_ink_2</item>
+        <item name="android:textFontWeight">500</item>
+    </style>
+    <style name="Widget.Kc.Field" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:textAppearance">@style/TextAppearance.Kc.Body</item>
+        <item name="android:textColor">@color/kc_ink</item>
+        <item name="android:paddingTop">13dp</item>
+        <item name="android:paddingBottom">13dp</item>
+    </style>
+</resources>

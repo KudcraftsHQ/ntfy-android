@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- kudcrafts: main-list row in the web app's style (icon, name, relative time, one-line preview, unread dot + count,
+     hairline). Same view ids as upstream's fragment_main_item.xml, which this replaces for the fdroid flavor. -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?android:attr/selectableItemBackground"
+        android:clickable="true"
+        android:focusable="true"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:minHeight="72dp">
+
+    <com.google.android.material.imageview.ShapeableImageView
+            android:id="@+id/main_item_image"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginTop="14dp"
+            android:scaleType="centerCrop"
+            app:shapeAppearanceOverlay="@style/ShapeAppearance.Kc.Circle"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            android:importantForAccessibility="no"/>
+
+    <TextView
+            android:id="@+id/main_item_text"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:layout_marginTop="14dp"
+            android:layout_marginEnd="8dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textAppearance="@style/TextAppearance.Kc.Title"
+            android:textColor="@color/kc_ink"
+            app:layout_constraintStart_toEndOf="@id/main_item_image"
+            app:layout_constraintEnd_toStartOf="@id/main_item_connection_error_image"
+            app:layout_constraintTop_toTopOf="parent"/>
+
+    <ImageView
+            android:id="@+id/main_item_connection_error_image"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginEnd="4dp"
+            app:srcCompat="@drawable/ic_warning_amber_24dp"
+            app:layout_constraintEnd_toStartOf="@id/main_item_notification_disabled_until_image"
+            app:layout_constraintTop_toTopOf="@id/main_item_text"
+            app:layout_constraintBottom_toBottomOf="@id/main_item_text"
+            android:visibility="gone"
+            android:importantForAccessibility="no"/>
+    <ImageView
+            android:id="@+id/main_item_notification_disabled_until_image"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginEnd="4dp"
+            app:srcCompat="@drawable/ic_notifications_off_time_gray_outline_24dp"
+            app:tint="@color/kc_ink_3"
+            app:layout_constraintEnd_toStartOf="@id/main_item_notification_disabled_forever_image"
+            app:layout_constraintTop_toTopOf="@id/main_item_text"
+            app:layout_constraintBottom_toBottomOf="@id/main_item_text"
+            android:importantForAccessibility="no"/>
+    <ImageView
+            android:id="@+id/main_item_notification_disabled_forever_image"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginEnd="4dp"
+            app:srcCompat="@drawable/ic_notifications_off_gray_outline_24dp"
+            app:tint="@color/kc_ink_3"
+            app:layout_constraintEnd_toStartOf="@id/main_item_instant_image"
+            app:layout_constraintTop_toTopOf="@id/main_item_text"
+            app:layout_constraintBottom_toBottomOf="@id/main_item_text"
+            android:importantForAccessibility="no"/>
+    <ImageView
+            android:id="@+id/main_item_instant_image"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_marginEnd="6dp"
+            app:srcCompat="@drawable/ic_bolt_gray_24dp"
+            app:tint="@color/kc_ink_3"
+            app:layout_constraintEnd_toStartOf="@id/main_item_date"
+            app:layout_constraintTop_toTopOf="@id/main_item_text"
+            app:layout_constraintBottom_toBottomOf="@id/main_item_text"
+            android:importantForAccessibility="no"/>
+
+    <TextView
+            android:id="@+id/main_item_date"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="@style/TextAppearance.Kc.Small"
+            android:textColor="@color/kc_ink_3"
+            android:fontFeatureSettings="tnum"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintBaseline_toBaselineOf="@id/main_item_text"/>
+
+    <TextView
+            android:id="@+id/main_item_status"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:layout_marginEnd="10dp"
+            android:layout_marginBottom="14dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textAppearance="@style/TextAppearance.Kc.Body"
+            android:textSize="14sp"
+            android:textColor="@color/kc_ink_2"
+            app:layout_constraintStart_toStartOf="@id/main_item_text"
+            app:layout_constraintEnd_toStartOf="@id/main_item_new"
+            app:layout_constraintTop_toBottomOf="@id/main_item_text"
+            app:layout_constraintBottom_toBottomOf="parent"/>
+
+    <!-- Unread: accent dot + count (the dot is a compound drawable) -->
+    <TextView
+            android:id="@+id/main_item_new"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:drawablePadding="6dp"
+            android:gravity="center_vertical"
+            android:textAppearance="@style/TextAppearance.Kc.Small"
+            android:textColor="@color/kc_ink_2"
+            android:textFontWeight="500"
+            android:fontFeatureSettings="tnum"
+            app:drawableStartCompat="@drawable/kc_unread_dot"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="@id/main_item_status"
+            app:layout_constraintBottom_toBottomOf="@id/main_item_status"/>
+
+    <View
+            android:id="@+id/kc_main_item_divider"
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:background="@color/kc_line"
+            app:layout_constraintStart_toStartOf="@id/main_item_text"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"/>
+</androidx.constraintlayout.widget.ConstraintLayout>

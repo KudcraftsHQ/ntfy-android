@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- kudcrafts: the web app's design tokens (web-kc/src/index.css), and Material 3 roles mapped onto them.
+     Overrides the upstream teal palette for the fdroid flavor only. -->
+<resources>
+    <color name="md_theme_primary">#7584FF</color>
+    <color name="md_theme_onPrimary">#FFFFFF</color>
+    <color name="md_theme_primaryContainer">#23264A</color>
+    <color name="md_theme_onPrimaryContainer">#A5AEFF</color>
+    <color name="md_theme_secondary">#A9A9B6</color>
+    <color name="md_theme_onSecondary">#15151C</color>
+    <color name="md_theme_secondaryContainer">#24242E</color>
+    <color name="md_theme_onSecondaryContainer">#EDEDF2</color>
+    <color name="md_theme_tertiary">#4CC38A</color>
+    <color name="md_theme_onTertiary">#FFFFFF</color>
+    <color name="md_theme_tertiaryContainer">#24242E</color>
+    <color name="md_theme_onTertiaryContainer">#EDEDF2</color>
+    <color name="md_theme_error">#FF6B7D</color>
+    <color name="md_theme_onError">#FFFFFF</color>
+    <color name="md_theme_errorContainer">#35181F</color>
+    <color name="md_theme_onErrorContainer">#FF6B7D</color>
+    <color name="md_theme_background">#15151C</color>
+    <color name="md_theme_onBackground">#EDEDF2</color>
+    <color name="md_theme_surface">#15151C</color>
+    <color name="md_theme_onSurface">#EDEDF2</color>
+    <color name="md_theme_surfaceVariant">#24242E</color>
+    <color name="md_theme_onSurfaceVariant">#A9A9B6</color>
+    <color name="md_theme_outline">#32323D</color>
+    <color name="md_theme_outlineVariant">#24242D</color>
+    <color name="md_theme_inverseSurface">#EDEDF2</color>
+    <color name="md_theme_inverseOnSurface">#15151C</color>
+    <color name="md_theme_inversePrimary">#A5AEFF</color>
+    <color name="md_theme_primaryFixed">#23264A</color>
+    <color name="md_theme_onPrimaryFixed">#A5AEFF</color>
+    <color name="md_theme_primaryFixedDim">#23264A</color>
+    <color name="md_theme_onPrimaryFixedVariant">#A5AEFF</color>
+    <color name="md_theme_secondaryFixed">#24242E</color>
+    <color name="md_theme_onSecondaryFixed">#EDEDF2</color>
+    <color name="md_theme_secondaryFixedDim">#262631</color>
+    <color name="md_theme_onSecondaryFixedVariant">#A9A9B6</color>
+    <color name="md_theme_tertiaryFixed">#24242E</color>
+    <color name="md_theme_onTertiaryFixed">#EDEDF2</color>
+    <color name="md_theme_tertiaryFixedDim">#262631</color>
+    <color name="md_theme_onTertiaryFixedVariant">#A9A9B6</color>
+    <color name="md_theme_surfaceDim">#262631</color>
+    <color name="md_theme_surfaceBright">#18181F</color>
+    <color name="md_theme_surfaceContainerLowest">#18181F</color>
+    <color name="md_theme_surfaceContainerLow">#111117</color>
+    <color name="md_theme_surfaceContainer">#1D1D26</color>
+    <color name="md_theme_surfaceContainerHigh">#262631</color>
+    <color name="md_theme_surfaceContainerHighest">#24242E</color>
+    <color name="md_theme_scrim">#000000</color>
+    <color name="action_bar">#15151C</color>
+    <color name="detail_activity_background">#15151C</color>
+    <color name="chip_background_color">#24242E</color>
+    <color name="chip_background_checked">#262631</color>
+</resources>

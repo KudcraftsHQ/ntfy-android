@@ -71,6 +71,8 @@ fun displayName(appBaseUrl: String?, subscription: Subscription) : String {
         return subscription.displayName
     } else if (!subscription.catalogName.isNullOrEmpty()) {
         return subscription.catalogName // kudcrafts: catalog, user rename > catalog name > topic
+    } else if (subscription.catalogApp != null && subscription.topic == subscription.catalogApp && subscription.catalogAppName != null) {
+        return subscription.catalogAppName // The app's main topic ("facemap") reads as the app ("FaceMap")
     } else if (subscription.catalogApp != null) {
         return subscription.topic
     } else if (appBaseUrl == subscription.baseUrl) {

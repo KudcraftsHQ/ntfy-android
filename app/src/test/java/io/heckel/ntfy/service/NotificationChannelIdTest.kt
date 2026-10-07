@@ -73,10 +73,13 @@ class NotificationChannelIdTest {
                 is MainAdapter.Item.Row -> "R:${it.subscription.topic}"
             }
         }
-        assertEquals(
-            listOf("H:FaceMap:4", "R:facemap-orders", "R:facemap-ops", "H:kudtrading:2", "R:kudtrading", "H:Other:1", "R:mine"),
-            shape
-        )
+        val expected = if (io.heckel.ntfy.ui.KcStyle.enabled) {
+            // fdroid look: a one-topic app is one row (no header), like the web sidebar
+            listOf("H:FaceMap:4", "R:facemap-orders", "R:facemap-ops", "R:kudtrading", "H:Other:1", "R:mine")
+        } else {
+            listOf("H:FaceMap:4", "R:facemap-orders", "R:facemap-ops", "H:kudtrading:2", "R:kudtrading", "H:Other:1", "R:mine")
+        }
+        assertEquals(expected, shape)
     }
 
     @Test

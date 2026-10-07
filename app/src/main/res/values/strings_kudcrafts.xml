@@ -10,6 +10,11 @@
     <string name="kc_sound_alert">Alert sound</string>
     <string name="kc_sound_urgent">Urgent sound</string>
 
+    <plurals name="kc_notification_group_summary">
+        <item quantity="one">%1$d message</item>
+        <item quantity="other">%1$d messages</item>
+    </plurals>
+
     <!-- Main list -->
     <string name="kc_main_section_other">Other</string>
     <string name="kc_main_app_header_menu">App options</string>

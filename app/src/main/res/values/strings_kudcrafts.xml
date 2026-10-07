@@ -15,6 +15,13 @@
         <item quantity="other">%1$d messages</item>
     </plurals>
 
+    <string name="kc_priority_urgent">Urgent</string>
+    <string name="kc_priority_high">High</string>
+    <string name="kc_message_open_link">Open link</string>
+    <string name="kc_message_copy">Copy</string>
+    <string name="kc_message_delete">Delete</string>
+    <string name="kc_main_title">Inbox</string>
+
     <!-- Main list -->
     <string name="kc_main_section_other">Other</string>
     <string name="kc_main_app_header_menu">App options</string>
@@ -58,8 +65,8 @@
     <string name="kc_login_dialog_error_https">The server must use https://</string>
 
     <!-- Sign-in dialog -->
-    <string name="kc_login_dialog_title">Sign in to Kudcrafts</string>
-    <string name="kc_login_dialog_description">Your password is used once to create a token for this phone. It is not stored.</string>
+    <string name="kc_login_dialog_title">Welcome back</string>
+    <string name="kc_login_dialog_description">Sign in once, and every app\'s alerts land here.\nYour password is used once and never stored.</string>
     <string name="kc_login_dialog_server_hint">Server</string>
     <string name="kc_login_dialog_username_hint">Username</string>
     <string name="kc_login_dialog_password_hint">Password</string>
@@ -70,5 +77,6 @@
     <string name="kc_login_dialog_error_password">Enter your password</string>
     <string name="kc_login_dialog_error_credentials">Wrong username or password</string>
     <string name="kc_login_dialog_error_other">Could not sign in: %1$s</string>
+    <string name="kc_login_dialog_server_change">%1$s · Change server</string>
     <string name="kc_login_dialog_success">Signed in as %1$s. Your apps will appear in a moment.</string>
 </resources>

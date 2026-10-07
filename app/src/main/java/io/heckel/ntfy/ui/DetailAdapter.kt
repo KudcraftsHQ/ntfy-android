@@ -48,11 +48,19 @@ class DetailAdapter(private val activity: Activity, private val lifecycleScope: 
     private val markwon: Markwon = MarkwonFactory.createForMessage(activity)
     val selected = mutableSetOf<String>() // Notification IDs
 
+    /** kudcrafts: "App / Topic" label and the app icon, shown on every row (web inbox style); set by DetailActivity */
+    data class KcSource(val label: String, val icon: Bitmap?)
+    var kcSource: KcSource? = null
+        set(value) {
+            field = value
+            notifyItemRangeChanged(0, itemCount)
+        }
+
     /* Creates and inflates view and return TopicViewHolder. */
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): DetailViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.fragment_detail_item, parent, false)
-        return DetailViewHolder(activity, lifecycleScope, repository, markwon, view, selected, onClick, onLongClick)
+        return DetailViewHolder(activity, lifecycleScope, repository, markwon, view, selected, onClick, onLongClick) { kcSource }
     }
 
     /* Gets current topic and uses it to bind view. */
@@ -87,7 +95,8 @@ class DetailAdapter(private val activity: Activity, private val lifecycleScope: 
         itemView: View,
         private val selected: Set<String>,
         val onClick: (Notification) -> Unit,
-        val onLongClick: (Notification) -> Unit
+        val onLongClick: (Notification) -> Unit,
+        private val kcSource: () -> KcSource? = { null }
     ) :
         RecyclerView.ViewHolder(itemView) {
         private var notification: Notification? = null
@@ -164,6 +173,42 @@ class DetailAdapter(private val activity: Activity, private val lifecycleScope: 
             maybeRenderAttachment(context, notification, attachmentFileStat)
             maybeRenderIcon(context, notification, iconFileStat)
             maybeRenderActions(context, notification)
+            if (KcStyle.enabled) kcBind(context, notification, unmatchedTags)
+        }
+
+        // kudcrafts: web-inbox row extras (views exist only in the fdroid layout)
+        private fun kcBind(context: Context, notification: Notification, tags: List<String>) {
+            val source = kcSource()
+            itemView.findViewById<TextView?>(R.id.kc_detail_item_source)?.text = source?.label ?: ""
+            dateView.text = KcStyle.relativeTime(notification.timestamp, context = context)
+            priorityImageView.visibility = View.GONE
+            if (iconView.visibility != View.VISIBLE) {
+                iconView.setImageBitmap(source?.icon ?: KcStyle.letterAvatar(context, source?.label ?: "?", 120))
+                iconView.visibility = View.VISIBLE
+            }
+            val bar = itemView.findViewById<View?>(R.id.kc_detail_item_priority_bar)
+            val badge = itemView.findViewById<TextView?>(R.id.kc_detail_item_badge)
+            when (notification.priority) {
+                PRIORITY_MAX -> {
+                    bar?.setBackgroundColor(context.getColor(R.color.kc_urgent)); bar?.visibility = View.VISIBLE
+                    badge?.text = context.getString(R.string.kc_priority_urgent)
+                    badge?.setTextColor(context.getColor(R.color.kc_urgent))
+                    badge?.setBackgroundResource(R.drawable.kc_badge_urgent); badge?.visibility = View.VISIBLE
+                }
+                PRIORITY_HIGH -> {
+                    bar?.setBackgroundColor(context.getColor(R.color.kc_high)); bar?.visibility = View.VISIBLE
+                    badge?.text = context.getString(R.string.kc_priority_high)
+                    badge?.setTextColor(context.getColor(R.color.kc_high))
+                    badge?.setBackgroundResource(R.drawable.kc_badge_high); badge?.visibility = View.VISIBLE
+                }
+                else -> {
+                    bar?.visibility = View.GONE
+                    badge?.visibility = View.GONE
+                }
+            }
+            val unread = notification.notificationId != 0
+            dateView.setTextColor(context.getColor(if (unread) R.color.kc_ink_2 else R.color.kc_ink_3))
+            if (tags.isNotEmpty()) tagsView.text = KcStyle.tagChips(context, tags)
         }
 
         private fun maybeMarkdown(message: String, notification: Notification): CharSequence {

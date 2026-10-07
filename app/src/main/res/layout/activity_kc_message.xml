@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- kudcrafts: one message, like the web app's message view: app header, big title, date + priority badge, markdown
+     body, "Open link" + action pills, tags, click URL. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        android:id="@+id/kc_message_root"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/kc_canvas"
+        android:fitsSystemWindows="true"
+        android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/kc_message_toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:background="@color/kc_canvas"
+            app:navigationIcon="@drawable/ic_arrow_back_white_24dp"
+            app:navigationIconTint="@color/kc_ink"
+            app:titleTextColor="@color/kc_ink"
+            app:titleTextAppearance="@style/TextAppearance.Kc.Title"/>
+    <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/kc_line"/>
+
+    <androidx.core.widget.NestedScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+        <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
+                android:paddingTop="28dp"
+                android:paddingBottom="40dp">
+
+            <com.google.android.material.imageview.ShapeableImageView
+                    android:id="@+id/kc_message_icon"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:scaleType="centerCrop"
+                    app:shapeAppearanceOverlay="@style/ShapeAppearance.Kc.Circle"
+                    android:importantForAccessibility="no"/>
+
+            <TextView
+                    android:id="@+id/kc_message_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:textAppearance="@style/TextAppearance.Kc.Headline"
+                    android:textSize="26sp"
+                    android:lineSpacingMultiplier="1.08"
+                    android:textIsSelectable="true"/>
+
+            <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+                <TextView
+                        android:id="@+id/kc_message_date"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textAppearance="@style/TextAppearance.Kc.Small"
+                        android:textSize="14sp"
+                        android:textColor="@color/kc_ink_3"/>
+                <TextView
+                        android:id="@+id/kc_message_badge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/kc_badge_urgent"
+                        android:paddingStart="7dp"
+                        android:paddingEnd="7dp"
+                        android:paddingTop="1dp"
+                        android:paddingBottom="2dp"
+                        android:textAppearance="@style/TextAppearance.Kc.Small"
+                        android:textSize="12sp"
+                        android:textFontWeight="500"
+                        android:visibility="gone"/>
+            </LinearLayout>
+
+            <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="22dp"
+                    android:layout_marginBottom="20dp"
+                    android:background="@color/kc_line"/>
+
+            <TextView
+                    android:id="@+id/kc_message_body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:lineSpacingMultiplier="1.22"
+                    android:textAppearance="@style/TextAppearance.Kc.Body"
+                    android:textColor="@color/kc_ink_2"
+                    android:textIsSelectable="true"/>
+
+            <com.google.android.material.imageview.ShapeableImageView
+                    android:id="@+id/kc_message_attachment"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:adjustViewBounds="true"
+                    android:scaleType="fitStart"
+                    android:visibility="gone"
+                    app:shapeAppearanceOverlay="@style/ShapeAppearance.Kc.Medium"
+                    android:importantForAccessibility="no"/>
+
+            <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/kc_message_buttons"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    app:chipSpacingHorizontal="8dp"
+                    app:chipSpacingVertical="8dp"/>
+
+            <TextView
+                    android:id="@+id/kc_message_tags"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="22dp"
+                    android:textAppearance="@style/TextAppearance.Kc.Small"
+                    android:textSize="12.5sp"
+                    android:textColor="@color/kc_ink_3"
+                    android:visibility="gone"/>
+
+            <View
+                    android:id="@+id/kc_message_footer_line"
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="24dp"
+                    android:background="@color/kc_line"/>
+            <TextView
+                    android:id="@+id/kc_message_footer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:textAppearance="@style/TextAppearance.Kc.Small"
+                    android:textColor="@color/kc_ink_3"
+                    android:textIsSelectable="true"/>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

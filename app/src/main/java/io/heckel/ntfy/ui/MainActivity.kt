@@ -165,6 +165,11 @@ class MainActivity : AppCompatActivity(), AddFragment.SubscribeListener, Notific
         toolbar.overflowIcon?.setTint(toolbarTextColor)
         setSupportActionBar(toolbar)
         title = getString(R.string.main_action_bar_title)
+        if (KcStyle.enabled) {
+            // kudcrafts: a serif masthead, like the web app's big titles
+            title = getString(R.string.kc_main_title)
+            toolbar.setTitleTextAppearance(this, R.style.TextAppearance_Kc_Masthead)
+        }
         
         // Set system status bar appearance
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars =

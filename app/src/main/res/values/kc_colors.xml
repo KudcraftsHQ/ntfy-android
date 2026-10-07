@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- kudcrafts: the web app's design tokens (web-kc/src/index.css). Used by the fdroid look; harmless for play. -->
+<resources>
+    <color name="kc_canvas">#FFFFFF</color>
+    <color name="kc_sidebar">#FAF9F7</color>
+    <color name="kc_panel">#FFFFFF</color>
+    <color name="kc_raised">#FFFFFF</color>
+    <color name="kc_hover">#F5F4F1</color>
+    <color name="kc_active">#EDECE8</color>
+    <color name="kc_pill">#F1F0EC</color>
+    <color name="kc_line">#ECEBE6</color>
+    <color name="kc_line_strong">#DDDCD5</color>
+    <color name="kc_ink">#1C1C26</color>
+    <color name="kc_ink_2">#555562</color>
+    <color name="kc_ink_3">#8B8B97</color>
+    <color name="kc_accent">#5266EB</color>
+    <color name="kc_on_accent">#FFFFFF</color>
+    <color name="kc_accent_soft">#EEF0FD</color>
+    <color name="kc_accent_ink">#3E50D8</color>
+    <color name="kc_positive">#1B7F4E</color>
+    <color name="kc_urgent">#C8364A</color>
+    <color name="kc_urgent_soft">#FCF0F2</color>
+    <color name="kc_high">#A8640A</color>
+    <color name="kc_high_soft">#FBF3E6</color>
+    <color name="kc_unread">#5266EB</color>
+</resources>

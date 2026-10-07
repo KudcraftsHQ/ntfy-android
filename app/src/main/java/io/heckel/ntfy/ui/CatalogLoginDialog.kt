@@ -5,10 +5,8 @@ import android.os.Bundle
 import android.view.View
 import android.widget.ProgressBar
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import io.heckel.ntfy.R
@@ -35,6 +33,8 @@ class CatalogLoginDialog : DialogFragment() {
     private lateinit var passwordView: TextInputEditText
     private lateinit var progress: ProgressBar
 
+    private lateinit var submit: View
+
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val view = requireActivity().layoutInflater.inflate(R.layout.fragment_catalog_login_dialog, null)
         serverLayout = view.findViewById(R.id.kc_login_server_layout)
@@ -44,26 +44,37 @@ class CatalogLoginDialog : DialogFragment() {
         passwordLayout = view.findViewById(R.id.kc_login_password_layout)
         passwordView = view.findViewById(R.id.kc_login_password)
         progress = view.findViewById(R.id.kc_login_progress)
+        submit = view.findViewById(R.id.kc_login_submit)
 
         if (savedInstanceState == null) {
             val repository = Repository.getInstance(requireContext())
             serverView.setText(repository.getCatalogBaseUrl() ?: getString(R.string.app_base_url))
             usernameView.setText(arguments?.getString(ARG_USERNAME) ?: "")
         }
-
-        val dialog = MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.kc_login_dialog_title)
-            .setView(view)
-            .setPositiveButton(R.string.kc_login_dialog_button_sign_in, null) // Overridden below to keep the dialog open
-            .setNegativeButton(R.string.kc_login_dialog_button_cancel, null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { signIn(dialog) }
+        // The server is rarely changed: show it as a quiet footer that reveals the field (web login style)
+        val serverGroup = view.findViewById<View>(R.id.kc_login_server_group)
+        val toggle = view.findViewById<android.widget.TextView>(R.id.kc_login_server_toggle)
+        toggle.text = getString(R.string.kc_login_dialog_server_change, serverView.text.toString().removePrefix("https://"))
+        toggle.setOnClickListener {
+            serverGroup.visibility = View.VISIBLE
+            toggle.visibility = View.GONE
+            serverView.requestFocus()
         }
+        view.findViewById<View>(R.id.kc_login_close).setOnClickListener { dismiss() }
+        submit.setOnClickListener { signIn() }
+        passwordView.setOnEditorActionListener { _, _, _ -> signIn(); true }
+
+        val dialog = Dialog(requireContext(), R.style.Theme_App_FullScreenDialog)
+        dialog.setContentView(view)
         return dialog
     }
 
-    private fun signIn(dialog: AlertDialog) {
+    override fun onStart() {
+        super.onStart()
+        dialog?.window?.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
+    }
+
+    private fun signIn() {
         serverLayout.error = null
         usernameLayout.error = null
         passwordLayout.error = null
@@ -72,6 +83,7 @@ class CatalogLoginDialog : DialogFragment() {
         val password = passwordView.text?.toString().orEmpty()
         if (!validBaseUrl(server)) {
             serverLayout.error = getString(R.string.kc_login_dialog_error_server)
+            dialog?.findViewById<View>(R.id.kc_login_server_group)?.visibility = View.VISIBLE
             return
         }
         if (!server.lowercase().startsWith("https://")) {
@@ -87,7 +99,7 @@ class CatalogLoginDialog : DialogFragment() {
             return
         }
         val baseUrl = normalizeBaseUrl(server)
-        setBusy(dialog, true)
+        setBusy(true)
         val appContext = requireContext().applicationContext
         lifecycleScope.launch(Dispatchers.IO) {
             val error = try {
@@ -101,7 +113,7 @@ class CatalogLoginDialog : DialogFragment() {
             }
             withContext(Dispatchers.Main) {
                 if (!isAdded) return@withContext
-                setBusy(dialog, false)
+                setBusy(false)
                 if (error == null) {
                     Toast.makeText(appContext, appContext.getString(R.string.kc_login_dialog_success, username), Toast.LENGTH_LONG).show()
                     parentFragmentManager.setFragmentResult(RESULT_KEY, Bundle())
@@ -113,9 +125,9 @@ class CatalogLoginDialog : DialogFragment() {
         }
     }
 
-    private fun setBusy(dialog: AlertDialog, busy: Boolean) {
+    private fun setBusy(busy: Boolean) {
         progress.visibility = if (busy) View.VISIBLE else View.GONE
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = !busy
+        submit.isEnabled = !busy
         serverView.isEnabled = !busy
         usernameView.isEnabled = !busy
         passwordView.isEnabled = !busy

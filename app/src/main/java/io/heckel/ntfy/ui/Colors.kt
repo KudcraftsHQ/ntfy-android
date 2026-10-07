@@ -21,8 +21,12 @@ class Colors {
         }
 
         fun notificationIcon(context: Context): Int {
-            return MaterialColors.getColor(context, R.attr.colorPrimary, Color.GREEN)
+            // kudcrafts: fixed mascot teal. Notifications are built from a Service context with no
+            // Material theme, so resolving colorPrimary fell back to Color.GREEN (the lime badge).
+            return KC_BRAND_TEAL
         }
+
+        private val KC_BRAND_TEAL = 0xFF299483.toInt()
 
         fun linkColor(context: Context): Int {
             return MaterialColors.getColor(context, R.attr.colorPrimary, Color.GREEN)

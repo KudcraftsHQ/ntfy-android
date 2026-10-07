@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- kudcrafts: Mercury-style theme layer for the fdroid flavor. AppTheme is a copy of upstream's (same colour roles,
+     now mapped to the web tokens in kc_tokens.xml) plus typography (Instrument Sans / Instrument Serif), shapes and
+     flat, hairline components. Upstream theme changes must be copied here on rebase. -->
+<resources>
+    <style name="AppTheme" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/md_theme_primary</item>
+        <item name="colorOnPrimary">@color/md_theme_onPrimary</item>
+        <item name="colorPrimaryContainer">@color/md_theme_primaryContainer</item>
+        <item name="colorOnPrimaryContainer">@color/md_theme_onPrimaryContainer</item>
+        <item name="colorSecondary">@color/md_theme_secondary</item>
+        <item name="colorOnSecondary">@color/md_theme_onSecondary</item>
+        <item name="colorSecondaryContainer">@color/md_theme_secondaryContainer</item>
+        <item name="colorOnSecondaryContainer">@color/md_theme_onSecondaryContainer</item>
+        <item name="colorTertiary">@color/md_theme_tertiary</item>
+        <item name="colorOnTertiary">@color/md_theme_onTertiary</item>
+        <item name="colorTertiaryContainer">@color/md_theme_tertiaryContainer</item>
+        <item name="colorOnTertiaryContainer">@color/md_theme_onTertiaryContainer</item>
+        <item name="colorError">@color/md_theme_error</item>
+        <item name="colorOnError">@color/md_theme_onError</item>
+        <item name="colorErrorContainer">@color/md_theme_errorContainer</item>
+        <item name="colorOnErrorContainer">@color/md_theme_onErrorContainer</item>
+        <item name="android:colorBackground">@color/md_theme_background</item>
+        <item name="colorOnBackground">@color/md_theme_onBackground</item>
+        <item name="colorSurface">@color/md_theme_surface</item>
+        <item name="colorOnSurface">@color/md_theme_onSurface</item>
+        <item name="colorSurfaceVariant">@color/md_theme_surfaceVariant</item>
+        <item name="colorOnSurfaceVariant">@color/md_theme_onSurfaceVariant</item>
+        <item name="colorOutline">@color/md_theme_outline</item>
+        <item name="colorOutlineVariant">@color/md_theme_outlineVariant</item>
+        <item name="colorSurfaceInverse">@color/md_theme_inverseSurface</item>
+        <item name="colorOnSurfaceInverse">@color/md_theme_inverseOnSurface</item>
+        <item name="colorPrimaryInverse">@color/md_theme_inversePrimary</item>
+        <item name="colorPrimaryFixed">@color/md_theme_primaryFixed</item>
+        <item name="colorOnPrimaryFixed">@color/md_theme_onPrimaryFixed</item>
+        <item name="colorPrimaryFixedDim">@color/md_theme_primaryFixedDim</item>
+        <item name="colorOnPrimaryFixedVariant">@color/md_theme_onPrimaryFixedVariant</item>
+        <item name="colorSecondaryFixed">@color/md_theme_secondaryFixed</item>
+        <item name="colorOnSecondaryFixed">@color/md_theme_onSecondaryFixed</item>
+        <item name="colorSecondaryFixedDim">@color/md_theme_secondaryFixedDim</item>
+        <item name="colorOnSecondaryFixedVariant">@color/md_theme_onSecondaryFixedVariant</item>
+        <item name="colorTertiaryFixed">@color/md_theme_tertiaryFixed</item>
+        <item name="colorOnTertiaryFixed">@color/md_theme_onTertiaryFixed</item>
+        <item name="colorTertiaryFixedDim">@color/md_theme_tertiaryFixedDim</item>
+        <item name="colorOnTertiaryFixedVariant">@color/md_theme_onTertiaryFixedVariant</item>
+        <item name="colorSurfaceDim">@color/md_theme_surfaceDim</item>
+        <item name="colorSurfaceBright">@color/md_theme_surfaceBright</item>
+        <item name="colorSurfaceContainerLowest">@color/md_theme_surfaceContainerLowest</item>
+        <item name="colorSurfaceContainerLow">@color/md_theme_surfaceContainerLow</item>
+        <item name="colorSurfaceContainer">@color/md_theme_surfaceContainer</item>
+        <item name="colorSurfaceContainerHigh">@color/md_theme_surfaceContainerHigh</item>
+        <item name="colorSurfaceContainerHighest">@color/md_theme_surfaceContainerHighest</item>
+
+        <item name="switchPreferenceCompatStyle">@style/MaterialSwitch</item>
+        <item name="windowActionModeOverlay">true</item>
+        <item name="searchViewStyle">@style/AppSearchViewStyle</item>
+
+        <item name="actionModeStyle">@style/ActionMode</item>
+        <item name="actionModeCloseButtonStyle">@style/ActionModeCloseButtonStyle</item>
+        <item name="actionOverflowButtonStyle">@style/OverflowButtonStyle</item>
+
+        <!-- kudcrafts: typography -->
+        <item name="android:fontFamily">@font/instrument_sans</item>
+        <item name="fontFamily">@font/instrument_sans</item>
+        <item name="android:textColorPrimary">@color/kc_ink</item>
+        <item name="android:textColorSecondary">@color/kc_ink_2</item>
+        <item name="android:textColorTertiary">@color/kc_ink_3</item>
+        <item name="android:textColorHint">@color/kc_ink_3</item>
+        <item name="android:textColorLink">@color/kc_accent_ink</item>
+        <item name="textAppearanceDisplaySmall">@style/TextAppearance.Kc.Display</item>
+        <item name="textAppearanceHeadlineLarge">@style/TextAppearance.Kc.Display</item>
+        <item name="textAppearanceHeadlineMedium">@style/TextAppearance.Kc.Headline</item>
+        <item name="textAppearanceHeadlineSmall">@style/TextAppearance.Kc.Headline</item>
+        <item name="textAppearanceTitleLarge">@style/TextAppearance.Kc.TitleLarge</item>
+        <item name="textAppearanceTitleMedium">@style/TextAppearance.Kc.Title</item>
+        <item name="textAppearanceTitleSmall">@style/TextAppearance.Kc.TitleSmall</item>
+        <item name="textAppearanceBodyLarge">@style/TextAppearance.Kc.Body</item>
+        <item name="textAppearanceBodyMedium">@style/TextAppearance.Kc.Body</item>
+        <item name="textAppearanceBodySmall">@style/TextAppearance.Kc.Small</item>
+        <item name="textAppearanceLabelLarge">@style/TextAppearance.Kc.Label</item>
+        <item name="textAppearanceLabelMedium">@style/TextAppearance.Kc.Small</item>
+        <item name="textAppearanceLabelSmall">@style/TextAppearance.Kc.Small</item>
+        <item name="textAppearanceListItem">@style/TextAppearance.Kc.Body</item>
+        <item name="textAppearanceListItemSecondary">@style/TextAppearance.Kc.Small</item>
+
+        <!-- kudcrafts: flat surfaces, hairlines, soft corners -->
+        <item name="shapeAppearanceCornerSmall">@style/ShapeAppearance.Kc.Small</item>
+        <item name="shapeAppearanceCornerMedium">@style/ShapeAppearance.Kc.Medium</item>
+        <item name="shapeAppearanceCornerLarge">@style/ShapeAppearance.Kc.Large</item>
+        <item name="android:windowBackground">@color/kc_canvas</item>
+        <item name="android:navigationBarColor">@color/kc_canvas</item>
+        <item name="android:windowLightNavigationBar">@bool/kc_light_bars</item>
+        <item name="android:listDivider">@drawable/kc_hairline</item>
+        <item name="dividerColor">@color/kc_line</item>
+        <item name="toolbarStyle">@style/Widget.Kc.Toolbar</item>
+        <item name="materialButtonStyle">@style/Widget.Kc.Button</item>
+        <item name="borderlessButtonStyle">@style/Widget.Kc.Button.Pill</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.Kc.Dialog</item>
+        <item name="textInputStyle">@style/Widget.Kc.TextInput</item>
+        <item name="chipStyle">@style/Widget.Kc.Chip</item>
+        <item name="popupMenuStyle">@style/Widget.Kc.PopupMenu</item>
+        <item name="colorControlHighlight">@color/kc_hover</item>
+    </style>
+    <!-- Upstream styles re-pointed at the tokens -->
+    <style name="ActionMode" parent="@style/Widget.AppCompat.ActionMode">
+        <item name="background">@color/kc_canvas</item>
+        <item name="titleTextStyle">@style/ActionModeTitle</item>
+    </style>
+    <style name="ActionModeTitle" parent="@style/TextAppearance.AppCompat.Widget.ActionMode.Title">
+        <item name="android:textColor">@color/kc_ink</item>
+        <item name="android:fontFamily">@font/instrument_sans</item>
+    </style>
+    <style name="ActionModeCloseButtonStyle" parent="Widget.AppCompat.ActionButton.CloseMode">
+        <item name="android:tint">@color/kc_ink</item>
+    </style>
+    <style name="FloatingActionButton" parent="@style/Widget.Material3.FloatingActionButton.Primary">
+        <item name="backgroundTint">@color/kc_ink</item>
+        <item name="tint">@color/kc_canvas</item>
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.Kc.Large</item>
+        <item name="elevation">2dp</item>
+    </style>
+    <style name="CardView" parent="@style/Widget.Material3.CardView.Filled">
+        <item name="cardBackgroundColor">@color/kc_canvas</item>
+        <item name="cardElevation">0dp</item>
+    </style>
+    <style name="BannerCardStyle" parent="Widget.Material3.CardView.Filled">
+        <item name="shapeAppearanceOverlay">@style/BannerShapeAppearance</item>
+        <item name="cardBackgroundColor">@color/kc_sidebar</item>
+        <item name="cardElevation">0dp</item>
+    </style>
+    <style name="Theme.App.FullScreenDialog" parent="AppTheme">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:statusBarColor">@color/kc_canvas</item>
+        <item name="android:windowBackground">@color/kc_canvas</item>
+        <item name="android:windowLightStatusBar">@bool/kc_light_bars</item>
+        <item name="android:windowAnimationStyle">@style/Animation.App.FullScreenDialog</item>
+    </style>
+</resources>

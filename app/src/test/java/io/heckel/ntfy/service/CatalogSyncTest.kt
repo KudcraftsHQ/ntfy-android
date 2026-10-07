@@ -256,11 +256,13 @@ class CatalogSyncTest {
 
     @Test
     fun backfillUsesServerRetentionNotSinceAll() {
-        assertEquals("90d", CatalogSync.backfillSince(90))
-        assertEquals("30d", CatalogSync.backfillSince(30))
-        assertEquals("90d", CatalogSync.backfillSince(0)) // Server reported none (12 h default) -> our cap, never "all"
-        assertEquals("90d", CatalogSync.backfillSince(365)) // Capped
-        assertEquals("1d", CatalogSync.backfillSince(1))
+        // Hours, because the server rejects "90d" with 400 invalid since parameter (seen in production)
+        assertEquals("2160h", CatalogSync.backfillSince(90))
+        assertEquals("720h", CatalogSync.backfillSince(30))
+        assertEquals("2160h", CatalogSync.backfillSince(0)) // Server reported none (12 h default) -> our cap, never "all"
+        assertEquals("2160h", CatalogSync.backfillSince(365)) // Capped
+        assertEquals("24h", CatalogSync.backfillSince(1))
+        assertTrue(Regex("^[0-9]+h$").matches(CatalogSync.backfillSince(7)))
     }
 
     @Test

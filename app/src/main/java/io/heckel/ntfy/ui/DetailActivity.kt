@@ -42,6 +42,7 @@ import io.heckel.ntfy.msg.NotificationService
 import io.heckel.ntfy.msg.Poller
 import io.heckel.ntfy.service.SubscriberServiceManager
 import io.heckel.ntfy.util.Log
+import io.heckel.ntfy.util.readBitmapFromUriOrNull
 import io.heckel.ntfy.util.copyToClipboard
 import io.heckel.ntfy.util.dangerButton
 import io.heckel.ntfy.util.decodeMessage
@@ -541,6 +542,13 @@ class DetailActivity : AppCompatActivity(), NotificationFragment.NotificationSet
 
             showHideMenuItems()
             updateTitle(subscriptionDisplayName)
+            if (KcStyle.enabled) {
+                // kudcrafts: every row shows "App / Topic" and the app icon, like the web inbox
+                val label = kcSourceLabel(subscription)
+                val icon = subscription.icon?.readBitmapFromUriOrNull(this@DetailActivity)
+                    ?: KcStyle.letterAvatar(this@DetailActivity, subscription.catalogAppName ?: label, 120)
+                runOnUiThread { adapter.kcSource = DetailAdapter.KcSource(label, icon) }
+            }
         }
     }
 
@@ -945,9 +953,18 @@ class DetailActivity : AppCompatActivity(), NotificationFragment.NotificationSet
         dialog.show()
     }
 
+    private fun kcSourceLabel(subscription: io.heckel.ntfy.db.Subscription): String {
+        val app = subscription.catalogAppName ?: return displayName(appBaseUrl, subscription)
+        val name = subscription.displayName ?: subscription.catalogName?.takeIf { it.isNotEmpty() }
+        return if (name == null || subscription.topic == subscription.catalogApp) app else "$app / $name"
+    }
+
     private fun onNotificationClick(notification: Notification) {
         if (actionMode != null) {
             handleActionModeClick(notification)
+        } else if (KcStyle.enabled) {
+            // kudcrafts: open the message, like the web inbox; its detail screen has "Open link" and the actions
+            startActivity(MessageDetailActivity.intent(this, notification.id, subscriptionId))
         } else if (notification.click != "") {
             try {
                 startActivity(Intent(ACTION_VIEW, notification.click.toUri()))

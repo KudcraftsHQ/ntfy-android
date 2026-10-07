@@ -258,10 +258,14 @@ object CatalogSync {
         }
     }
 
-    /** "<n>d" for the backfill poll: the server's retention, capped, 90 days if the server reports none */
+    /**
+     * The backfill poll's since=: the server's retention, capped, 90 days if the server reports none. In HOURS:
+     * ntfy's since= accepts s/m/h durations only, "90d" is a 400 (invalid since parameter), which made every
+     * backfill fail in 1.25.2-kc.1.
+     */
     fun backfillSince(historyDays: Int): String {
         val days = if (historyDays > 0) historyDays.coerceAtMost(MAX_BACKFILL_DAYS) else MAX_BACKFILL_DAYS
-        return "${days}d"
+        return "${days * 24}h"
     }
 
     private suspend fun runPendingBackfills(context: Context, repository: Repository) {

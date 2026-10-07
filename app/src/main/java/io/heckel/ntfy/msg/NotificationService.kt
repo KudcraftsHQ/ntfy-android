@@ -45,14 +45,20 @@ class NotificationService(val context: Context) {
     fun cancel(notification: Notification) {
         if (notification.notificationId != 0) {
             Log.d(TAG, "Cancelling notification ${notification.id}: ${decodeMessage(notification)}")
-            notificationManager.cancel(notification.notificationId)
+            cancel(notification.notificationId)
         }
     }
 
     fun cancel(notificationId: Int) {
         if (notificationId != 0) {
             Log.d(TAG, "Cancelling notification $notificationId")
+            val group = try {
+                notificationManager.activeNotifications.find { it.id == notificationId }?.notification?.group
+            } catch (_: Exception) {
+                null
+            }
             notificationManager.cancel(notificationId)
+            group?.let { refreshGroupSummary(it, excludeId = notificationId) }
         }
     }
 
@@ -107,7 +113,12 @@ class NotificationService(val context: Context) {
             .setOnlyAlertOnce(true) // Do not vibrate or play sound if already showing (updates!)
             .setAutoCancel(true) // Cancel when notification is clicked
         setStyleAndText(builder, subscription, notification) // Preview picture or big text style
-        setClickAction(builder, subscription, notification)
+        val group = notificationGroup(subscription)
+        val groupName = if (subscription.catalogApp != null) subscription.catalogAppName ?: subscription.catalogApp else displayName(appBaseUrl, subscription)
+        builder
+            .setGroup(group) // kudcrafts: our own group, so Android never auto-groups us under a summary that opens the app
+            .addExtras(Bundle().apply { putString(EXTRA_GROUP_NAME, groupName) })
+        setClickAction(builder, subscription, notification, group)
         maybeSetDeleteIntent(builder, insistent)
         maybeSetSound(builder, insistent, update)
         maybeSetProgress(builder, notification)
@@ -126,7 +137,9 @@ class NotificationService(val context: Context) {
             maybePlayInsistentSound(toChannelId(groupId, PRIORITY_MAX), insistent)
         }
 
-        notificationManager.notify(notification.notificationId, builder.build())
+        val built = builder.build()
+        notificationManager.notify(notification.notificationId, built)
+        refreshGroupSummary(group, current = notification.notificationId to built)
     }
 
     private fun maybeSetDeleteIntent(builder: NotificationCompat.Builder, insistent: Boolean) {
@@ -199,17 +212,81 @@ class NotificationService(val context: Context) {
         return context.getString(R.string.notification_popup_file, message, attachmentInfos)
     }
 
-    private fun setClickAction(builder: NotificationCompat.Builder, subscription: Subscription, notification: Notification) {
-        if (notification.click == "") {
-            builder.setContentIntent(detailActivityIntent(subscription))
-        } else {
-            try {
-                val uri = notification.click.toUri()
-                val viewIntent = PendingIntent.getActivity(context, Random().nextInt(), Intent(Intent.ACTION_VIEW, uri), PendingIntent.FLAG_IMMUTABLE)
-                builder.setContentIntent(viewIntent)
-            } catch (_: Exception) {
-                builder.setContentIntent(detailActivityIntent(subscription))
+    /**
+     * kudcrafts: a tap opens the message's click URL, or the topic when there is none (NotificationClickActivity).
+     * The request code is the notification id, so every notification keeps its own PendingIntent and an update
+     * (icon downloaded, attachment progress) replaces it instead of piling up random ones.
+     */
+    private fun setClickAction(builder: NotificationCompat.Builder, subscription: Subscription, notification: Notification, group: String) {
+        builder.setContentIntent(clickPendingIntent(subscription, notification, group))
+    }
+
+    fun clickPendingIntent(subscription: Subscription, notification: Notification, group: String?): PendingIntent {
+        val intent = NotificationClickActivity.intent(
+            context = context,
+            click = notification.click,
+            subscriptionId = subscription.id,
+            baseUrl = subscription.baseUrl,
+            topic = subscription.topic,
+            displayName = displayName(appBaseUrl, subscription),
+            instant = subscription.instant,
+            mutedUntil = subscription.mutedUntil,
+            sequenceId = notification.sequenceId.ifEmpty { notification.id },
+            group = group
+        )
+        return PendingIntent.getActivity(context, notification.notificationId, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
+
+    private fun notificationGroup(subscription: Subscription): String {
+        return subscription.catalogApp?.let { GROUP_KEY_PREFIX + "app-" + it } ?: (GROUP_KEY_PREFIX + "sub-" + subscription.id)
+    }
+
+    /**
+     * kudcrafts: with several notifications in one group, post a summary whose tap does what tapping the newest
+     * message does (its click URL). Without our own summary, Android auto-groups 4+ notifications under a system
+     * summary whose tap opens the app instead of the URL. Removed again when the group is empty.
+     */
+    fun refreshGroupSummary(group: String, excludeId: Int = 0, current: Pair<Int, android.app.Notification>? = null) {
+        try {
+            val summaryId = groupSummaryId(group)
+            val active = notificationManager.activeNotifications
+                .filter { it.notification.group == group && it.id != summaryId && it.id != excludeId && it.id != current?.first }
+                .map { it.id to it.notification }
+            val children = (active + listOfNotNull(current))
+                .filter { (_, n) -> n.flags and android.app.Notification.FLAG_GROUP_SUMMARY == 0 }
+                .sortedByDescending { (_, n) -> n.`when` }
+            if (children.isEmpty()) {
+                notificationManager.cancel(summaryId)
+                return
             }
+            if (children.size < 2) {
+                return // A lone child shows as itself; an existing summary just stays out of the way
+            }
+            val newest = children.first().second
+            val groupName = newest.extras?.getString(EXTRA_GROUP_NAME) ?: context.getString(R.string.app_name)
+            val inbox = NotificationCompat.InboxStyle()
+            children.take(5).forEach { (_, n) ->
+                val title = n.extras?.getCharSequence(android.app.Notification.EXTRA_TITLE)
+                val text = n.extras?.getCharSequence(android.app.Notification.EXTRA_TEXT)
+                inbox.addLine(listOfNotNull(title, text).joinToString(" · "))
+            }
+            inbox.setSummaryText(context.resources.getQuantityString(R.plurals.kc_notification_group_summary, children.size, children.size))
+            val summary = NotificationCompat.Builder(context, newest.channelId)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setColor(Colors.notificationIcon(context))
+                .setContentTitle(groupName)
+                .setContentText(newest.extras?.getCharSequence(android.app.Notification.EXTRA_TITLE))
+                .setStyle(inbox)
+                .setGroup(group)
+                .setGroupSummary(true)
+                .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN) // The children alert, never the summary
+                .setOnlyAlertOnce(true)
+                .setAutoCancel(true)
+                .setContentIntent(newest.contentIntent)
+                .build()
+            notificationManager.notify(summaryId, summary)
+        } catch (e: Exception) {
+            Log.w(TAG, "Unable to refresh group summary for $group", e)
         }
     }
 
@@ -665,6 +742,13 @@ class NotificationService(val context: Context) {
         private const val TAG = "NtfyNotifService"
 
         const val DEFAULT_GROUP = "ntfy"
+        private const val GROUP_KEY_PREFIX = "kc-notif-" // Notification group key (not a channel group)
+        private const val EXTRA_GROUP_NAME = "kc_group_name"
+
+        fun groupSummaryId(group: String): Int {
+            val hash = ("summary:$group").hashCode()
+            return if (hash == 0 || hash == Int.MIN_VALUE) 2 else -kotlin.math.abs(hash) // Negative: never clashes with message ids
+        }
         private const val SUBSCRIPTION_GROUP_PREFIX = "ntfy-subscription-"
         private const val GROUP_SUFFIX_PRIORITY_MIN = "-min"
         private const val GROUP_SUFFIX_PRIORITY_LOW = "-low"

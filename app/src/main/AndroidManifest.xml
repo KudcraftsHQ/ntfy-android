@@ -97,6 +97,23 @@
                 android:exported="false">
         </activity>
 
+        <!-- kudcrafts: one message, web-style (fdroid look) -->
+        <activity
+                android:name=".ui.MessageDetailActivity"
+                android:exported="false"
+                android:parentActivityName=".ui.DetailActivity">
+        </activity>
+
+        <!-- kudcrafts: notification tap -> click URL (or the topic). Invisible, finishes immediately -->
+        <activity
+                android:name=".msg.NotificationClickActivity"
+                android:exported="false"
+                android:excludeFromRecents="true"
+                android:noHistory="true"
+                android:taskAffinity=""
+                android:theme="@android:style/Theme.Translucent.NoTitleBar">
+        </activity>
+
         <!-- UnifiedPush link activity to facilitate distributor selection, see https://unifiedpush.org/developers/spec/android/#link-activity -->
         <activity android:name=".up.LinkActivity" android:exported="true">
             <intent-filter>

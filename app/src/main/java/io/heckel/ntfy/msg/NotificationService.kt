@@ -89,7 +89,8 @@ class NotificationService(val context: Context) {
 
     private fun displayInternal(subscription: Subscription, notification: Notification, update: Boolean = false) {
         val title = formatTitle(appBaseUrl, subscription, notification)
-        val catalogApp = subscription.catalogApp // kudcrafts: catalog, channels per (app, sound class)
+        val catalogApp = subscription.catalogApp // kudcrafts: catalog, channels per (app, sound class, sound theme)
+        val theme = repository.getSoundTheme()
         val groupId = if (catalogApp != null) {
             CatalogChannels.groupId(catalogApp)
         } else if (subscription.dedicatedChannels) {
@@ -98,7 +99,7 @@ class NotificationService(val context: Context) {
             DEFAULT_GROUP
         }
         val channelId = if (catalogApp != null) {
-            CatalogChannels.channelId(catalogApp, subscription.catalogSound, notification.priority)
+            CatalogChannels.channelId(catalogApp, subscription.catalogSound, theme, notification.priority)
         } else {
             toChannelId(groupId, notification.priority)
         }
@@ -129,8 +130,8 @@ class NotificationService(val context: Context) {
         maybeAddUserActions(builder, notification)
 
         if (catalogApp != null) {
-            maybeCreateCatalogChannels(catalogApp, subscription.catalogAppName ?: catalogApp, subscription.catalogSound)
-            maybePlayInsistentSound(CatalogChannels.channelId(catalogApp, subscription.catalogSound, CatalogChannels.Band.MAX), insistent)
+            maybeCreateCatalogChannels(catalogApp, subscription.catalogAppName ?: catalogApp, subscription.catalogSound, theme)
+            maybePlayInsistentSound(CatalogChannels.channelId(catalogApp, subscription.catalogSound, theme, CatalogChannels.Band.MAX), insistent)
         } else {
             maybeCreateNotificationGroup(groupId, subscriptionGroupName(subscription))
             maybeCreateNotificationChannel(groupId, notification.priority)
@@ -551,29 +552,32 @@ class NotificationService(val context: Context) {
         return channel?.sound ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
     }
 
-    // kudcrafts: catalog channels (spec section 7.5)
+    // kudcrafts: catalog channels (spec section 7.5) and sound themes
 
-    /** Creates the group and the three channels of one (app, sound class). Creating an existing channel only renames it. */
-    fun maybeCreateCatalogChannels(app: String, appName: String, sound: String?) {
+    /** Creates the group and the three channels of one (app, sound class, theme). Creating an existing channel only renames it. */
+    fun maybeCreateCatalogChannels(app: String, appName: String, sound: String?, theme: String) {
         val soundClass = CatalogSound.normalize(sound)
         maybeCreateNotificationGroup(CatalogChannels.groupId(app), appName)
         CatalogChannels.Band.entries.forEach { band ->
-            notificationManager.createNotificationChannel(buildCatalogChannel(app, appName, soundClass, band))
+            notificationManager.createNotificationChannel(buildCatalogChannel(app, appName, soundClass, theme, band))
         }
     }
 
     /**
-     * Creates channels for every (app, sound class) in use and deletes catalog channels and groups that nothing
-     * uses anymore (e.g. the app's default sound changed, or the app left the catalog). User edits to a live
-     * channel are kept by Android; non-catalog channels are never touched.
+     * Creates channels for every (app, sound class) in use, in the theme in use, and deletes catalog channels
+     * and groups that nothing uses anymore (the theme changed, the app's default sound changed, or the app left
+     * the catalog). User edits to a live channel are kept by Android; a deleted channel takes its user edits
+     * with it (Android brings them back only if the very same id is created again, i.e. on switching back to
+     * that theme). Non-catalog channels are never touched.
      */
     fun reconcileCatalogChannels(subscriptions: List<Subscription>) {
         try {
+            val theme = repository.getSoundTheme()
             subscriptions
                 .filter { it.catalogApp != null }
                 .distinctBy { it.catalogApp to CatalogSound.normalize(it.catalogSound) }
-                .forEach { maybeCreateCatalogChannels(it.catalogApp!!, it.catalogAppName ?: it.catalogApp, it.catalogSound) }
-            CatalogChannels.staleChannelIds(notificationManager.notificationChannels.map { it.id }, subscriptions)
+                .forEach { maybeCreateCatalogChannels(it.catalogApp!!, it.catalogAppName ?: it.catalogApp, it.catalogSound, theme) }
+            CatalogChannels.staleChannelIds(notificationManager.notificationChannels.map { it.id }, subscriptions, theme)
                 .forEach { notificationManager.deleteNotificationChannel(it) }
             CatalogChannels.staleGroupIds(notificationManager.notificationChannelGroups.map { it.id }, subscriptions)
                 .forEach { notificationManager.deleteNotificationChannelGroup(it) }
@@ -582,9 +586,9 @@ class NotificationService(val context: Context) {
         }
     }
 
-    private fun buildCatalogChannel(app: String, appName: String, soundClass: String, band: CatalogChannels.Band): NotificationChannel {
-        val id = CatalogChannels.channelId(app, soundClass, band)
-        val soundLabel = catalogSoundLabel(soundClass)
+    private fun buildCatalogChannel(app: String, appName: String, soundClass: String, theme: String, band: CatalogChannels.Band): NotificationChannel {
+        val id = CatalogChannels.channelId(app, soundClass, theme, band)
+        val soundLabel = catalogSoundLabel(context, soundClass)
         val pause = 300L
         val shortVibration = longArrayOf(pause, 100, pause, 100, pause, 100)
         val longVibration = longArrayOf(pause, 100, pause, 100, pause, 100, pause, 2000)
@@ -598,13 +602,14 @@ class NotificationService(val context: Context) {
                 enableVibration(true)
                 setBypassDnd(true)
                 vibrationPattern = longVibration + longVibration + longVibration
-                setSound(catalogSoundUri(CatalogSound.URGENT), catalogAudioAttributes())
+                setSound(catalogSoundUri(theme, CatalogSound.URGENT), catalogAudioAttributes())
             }
             CatalogChannels.Band.NORMAL -> {
+                // Heads-up and vibration for the classes that want a reaction; a plain sound for the ones that only inform
                 val importance = when (soundClass) {
                     CatalogSound.SILENT -> NotificationManager.IMPORTANCE_LOW
-                    CatalogSound.DEFAULT -> NotificationManager.IMPORTANCE_DEFAULT
-                    else -> NotificationManager.IMPORTANCE_HIGH
+                    CatalogSound.DEFAULT, CatalogSound.CASH, CatalogSound.DONE -> NotificationManager.IMPORTANCE_DEFAULT
+                    else -> NotificationManager.IMPORTANCE_HIGH // alert, urgent, fail, ask
                 }
                 NotificationChannel(id, context.getString(R.string.kc_channel_name, appName, soundLabel), importance).apply {
                     when (soundClass) {
@@ -612,19 +617,19 @@ class NotificationService(val context: Context) {
                             setSound(null, null)
                             enableVibration(false)
                         }
-                        CatalogSound.DEFAULT -> {
-                            setSound(catalogSoundUri(CatalogSound.DEFAULT), catalogAudioAttributes())
+                        CatalogSound.DEFAULT, CatalogSound.CASH, CatalogSound.DONE -> {
+                            setSound(catalogSoundUri(theme, soundClass), catalogAudioAttributes())
                             enableVibration(false)
                         }
-                        CatalogSound.ALERT -> {
-                            setSound(catalogSoundUri(CatalogSound.ALERT), catalogAudioAttributes())
-                            enableVibration(true)
-                            vibrationPattern = shortVibration
-                        }
-                        else -> {
-                            setSound(catalogSoundUri(CatalogSound.URGENT), catalogAudioAttributes())
+                        CatalogSound.URGENT -> {
+                            setSound(catalogSoundUri(theme, soundClass), catalogAudioAttributes())
                             enableVibration(true)
                             vibrationPattern = longVibration
+                        }
+                        else -> { // alert, fail, ask
+                            setSound(catalogSoundUri(theme, soundClass), catalogAudioAttributes())
+                            enableVibration(true)
+                            vibrationPattern = shortVibration
                         }
                     }
                 }
@@ -634,35 +639,9 @@ class NotificationService(val context: Context) {
         return channel
     }
 
-    /**
-     * android.resource URI of the bundled clip kc_<class> (res/raw, synthesized in CI). If a build has no
-     * clips (a local debug build without sox), fall back to the system notification sound.
-     */
-    private fun catalogSoundUri(soundClass: String): Uri {
-        val name = "kc_$soundClass"
-        @Suppress("DiscouragedApi")
-        val resId = context.resources.getIdentifier(name, "raw", context.packageName)
-        return if (resId != 0) {
-            "android.resource://${context.packageName}/raw/$name".toUri()
-        } else {
-            RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-        }
-    }
-
-    private fun catalogAudioAttributes(): AudioAttributes {
-        return AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
-    }
-
-    private fun catalogSoundLabel(soundClass: String): String {
-        return when (soundClass) {
-            CatalogSound.SILENT -> context.getString(R.string.kc_sound_silent)
-            CatalogSound.ALERT -> context.getString(R.string.kc_sound_alert)
-            CatalogSound.URGENT -> context.getString(R.string.kc_sound_urgent)
-            else -> context.getString(R.string.kc_sound_default)
-        }
+    /** The bundled clip of (theme, class). Should a build lack it, fall back to the system notification sound. */
+    private fun catalogSoundUri(theme: String, soundClass: String): Uri {
+        return catalogClipUri(context, theme, soundClass) ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
     }
 
     /**
@@ -740,6 +719,34 @@ class NotificationService(val context: Context) {
         const val BROADCAST_TYPE_USER_ACTION = "io.heckel.ntfy.USER_ACTION_RUN"
 
         private const val TAG = "NtfyNotifService"
+
+        /** kudcrafts: android.resource URI of res/raw/kc_<theme>_<class>.ogg, or null if there is no such clip (silent) */
+        fun catalogClipUri(context: Context, theme: String?, soundClass: String?): Uri? {
+            val name = CatalogTheme.clipName(theme, soundClass) ?: return null
+            @Suppress("DiscouragedApi")
+            val resId = context.resources.getIdentifier(name, "raw", context.packageName)
+            return if (resId != 0) "android.resource://${context.packageName}/raw/$name".toUri() else null
+        }
+
+        fun catalogAudioAttributes(): AudioAttributes {
+            return AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+        }
+
+        fun catalogSoundLabel(context: Context, soundClass: String?): String {
+            return when (CatalogSound.normalize(soundClass)) {
+                CatalogSound.SILENT -> context.getString(R.string.kc_sound_silent)
+                CatalogSound.ALERT -> context.getString(R.string.kc_sound_alert)
+                CatalogSound.URGENT -> context.getString(R.string.kc_sound_urgent)
+                CatalogSound.CASH -> context.getString(R.string.kc_sound_cash)
+                CatalogSound.DONE -> context.getString(R.string.kc_sound_done)
+                CatalogSound.FAIL -> context.getString(R.string.kc_sound_fail)
+                CatalogSound.ASK -> context.getString(R.string.kc_sound_ask)
+                else -> context.getString(R.string.kc_sound_default)
+            }
+        }
 
         const val DEFAULT_GROUP = "ntfy"
         private const val GROUP_KEY_PREFIX = "kc-notif-" // Notification group key (not a channel group)

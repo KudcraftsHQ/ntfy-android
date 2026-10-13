@@ -5,9 +5,13 @@ import io.heckel.ntfy.db.Subscription
 /**
  * kudcrafts: catalog. Pure naming rules for per-app notification channels (spec section 7.5).
  *
- * One channel per (app, sound class), in three priority bands. The sound class is part of the id
- * because Android channels are immutable once created: a changed default yields a new channel
- * instead of an edit that Android would silently ignore.
+ * One channel per (app, sound class, sound theme), in three priority bands. Class and theme are part
+ * of the id because Android channels are immutable once created: a changed default or a changed theme
+ * yields a new channel instead of an edit that Android would silently ignore.
+ *
+ * Ids are kc-<app>-<class>-<theme><band>. Ids of releases before sound themes were kc-<app>-<class><band>;
+ * themes and classes are disjoint sets, so an old id can never equal a new one, whatever the app is called,
+ * and the old channels are simply stale.
  */
 object CatalogChannels {
     const val CHANNEL_PREFIX = "kc-"
@@ -27,11 +31,11 @@ object CatalogChannels {
         else -> Band.NORMAL
     }
 
-    fun channelId(app: String, sound: String?, band: Band): String {
-        return CHANNEL_PREFIX + app + "-" + CatalogSound.normalize(sound) + band.suffix
+    fun channelId(app: String, sound: String?, theme: String?, band: Band): String {
+        return CHANNEL_PREFIX + app + "-" + CatalogSound.normalize(sound) + "-" + CatalogTheme.normalize(theme) + band.suffix
     }
 
-    fun channelId(app: String, sound: String?, priority: Int): String = channelId(app, sound, band(priority))
+    fun channelId(app: String, sound: String?, theme: String?, priority: Int): String = channelId(app, sound, theme, band(priority))
 
     /** (app, sound class) pairs that the current subscriptions need */
     fun desiredPairs(subscriptions: List<Subscription>): Set<Pair<String, String>> {
@@ -41,9 +45,9 @@ object CatalogChannels {
             .toSet()
     }
 
-    fun desiredChannelIds(subscriptions: List<Subscription>): Set<String> {
+    fun desiredChannelIds(subscriptions: List<Subscription>, theme: String?): Set<String> {
         return desiredPairs(subscriptions)
-            .flatMap { (app, sound) -> Band.entries.map { channelId(app, sound, it) } }
+            .flatMap { (app, sound) -> Band.entries.map { channelId(app, sound, theme, it) } }
             .toSet()
     }
 
@@ -51,9 +55,13 @@ object CatalogChannels {
         return desiredPairs(subscriptions).map { groupId(it.first) }.toSet()
     }
 
-    /** Catalog channels/groups that exist on the device but are no longer needed. Never touches non-catalog ids. */
-    fun staleChannelIds(existing: Collection<String>, subscriptions: List<Subscription>): List<String> {
-        val desired = desiredChannelIds(subscriptions)
+    /**
+     * Catalog channels/groups that exist on the device but are no longer needed: another theme, another
+     * class, an app that left the catalog. Never touches non-catalog ids (upstream's all start with "ntfy",
+     * the sign-in prompt's is "kudcrafts_account").
+     */
+    fun staleChannelIds(existing: Collection<String>, subscriptions: List<Subscription>, theme: String?): List<String> {
+        val desired = desiredChannelIds(subscriptions, theme)
         // Channel and group ids are separate namespaces on Android, so an app called "app" is fine here
         return existing.filter { it.startsWith(CHANNEL_PREFIX) && it !in desired }
     }

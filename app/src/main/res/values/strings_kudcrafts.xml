@@ -9,6 +9,10 @@
     <string name="kc_sound_default">Default sound</string>
     <string name="kc_sound_alert">Alert sound</string>
     <string name="kc_sound_urgent">Urgent sound</string>
+    <string name="kc_sound_cash">Cash sound</string>
+    <string name="kc_sound_done">Done sound</string>
+    <string name="kc_sound_fail">Fail sound</string>
+    <string name="kc_sound_ask">Ask sound</string>
 
     <plurals name="kc_notification_group_summary">
         <item quantity="one">%1$d message</item>
@@ -55,6 +59,13 @@
     <string name="kc_settings_sync_now_summary">Last synced %1$s</string>
     <string name="kc_settings_sync_now_summary_never">Not synced yet</string>
     <string name="kc_settings_sync_now_toast">Syncing apps and topics …</string>
+
+    <!-- Settings: sound theme (theme names themselves are the server's ids, capitalized) -->
+    <string name="kc_settings_sound_theme_key" translatable="false">KudcraftsSoundTheme</string>
+    <string name="kc_settings_sound_theme_title">Sound theme</string>
+    <string name="kc_settings_sound_theme_follow_server">Follow server (%1$s)</string>
+    <string name="kc_settings_sound_theme_playing">%1$s · %2$s</string>
+    <string name="kc_settings_sound_theme_use">Use this theme</string>
 
     <!-- Token refused (revoked or expired) -->
     <string name="kc_auth_channel_name">Kudcrafts account</string>

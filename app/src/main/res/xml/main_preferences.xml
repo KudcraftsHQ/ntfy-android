@@ -10,6 +10,9 @@
         <Preference
                 app:key="@string/kc_settings_sync_now_key"
                 app:title="@string/kc_settings_sync_now_title"/>
+        <Preference
+                app:key="@string/kc_settings_sound_theme_key"
+                app:title="@string/kc_settings_sound_theme_title"/>
     </PreferenceCategory>
     <PreferenceCategory app:title="@string/settings_notifications_header">
         <ListPreference

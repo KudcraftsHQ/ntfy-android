@@ -13,6 +13,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.asLiveData
 import androidx.lifecycle.map
 import io.heckel.ntfy.msg.ApiService
+import io.heckel.ntfy.msg.CatalogTheme
 import io.heckel.ntfy.util.Log
 import io.heckel.ntfy.util.validUrl
 import java.util.concurrent.ConcurrentHashMap
@@ -218,6 +219,36 @@ class Repository(private val sharedPrefs: SharedPreferences, private val databas
 
     fun setCatalogAuthError(error: Boolean) {
         sharedPrefs.edit { putBoolean(SHARED_PREFS_CATALOG_AUTH_ERROR, error) }
+    }
+
+    // kudcrafts: sound themes
+
+    /** The server-wide theme from the last catalog (GET /v1/catalog "sound_theme"), or null if none was synced */
+    fun getCatalogServerSoundTheme(): String? = sharedPrefs.getString(SHARED_PREFS_CATALOG_SOUND_THEME, null)
+
+    fun setCatalogServerSoundTheme(theme: String?) {
+        sharedPrefs.edit {
+            if (theme == null) remove(SHARED_PREFS_CATALOG_SOUND_THEME) else putString(SHARED_PREFS_CATALOG_SOUND_THEME, theme)
+        }
+    }
+
+    /** This device's own theme, or null to follow the server */
+    fun getSoundThemeOverride(): String? = sharedPrefs.getString(SHARED_PREFS_SOUND_THEME_OVERRIDE, null)
+
+    fun setSoundThemeOverride(theme: String?) {
+        sharedPrefs.edit {
+            if (theme == null) remove(SHARED_PREFS_SOUND_THEME_OVERRIDE) else putString(SHARED_PREFS_SOUND_THEME_OVERRIDE, theme)
+        }
+    }
+
+    /** The theme notifications play in: the device's override, else the server's, else cabin */
+    fun getSoundTheme(): String = CatalogTheme.resolve(getSoundThemeOverride(), getCatalogServerSoundTheme())
+
+    /** Which catalog fields the stored ETag covers, see CatalogSync.CATALOG_FORMAT */
+    fun getCatalogFormat(): Int = sharedPrefs.getInt(SHARED_PREFS_CATALOG_FORMAT, 0)
+
+    fun setCatalogFormat(format: Int) {
+        sharedPrefs.edit { putInt(SHARED_PREFS_CATALOG_FORMAT, format) }
     }
 
     fun getCatalogLastSync(): Long = sharedPrefs.getLong(SHARED_PREFS_CATALOG_LAST_SYNC, 0L)
@@ -838,6 +869,9 @@ class Repository(private val sharedPrefs: SharedPreferences, private val databas
         const val SHARED_PREFS_CATALOG_PREVIOUS_USER = "CatalogPreviousUser" // + ":<baseUrl>"
         const val SHARED_PREFS_CATALOG_ICON_RETRY = "CatalogIconRetry"
         const val SHARED_PREFS_CATALOG_HISTORY_DAYS = "CatalogHistoryDays"
+        const val SHARED_PREFS_CATALOG_SOUND_THEME = "CatalogSoundTheme" // kudcrafts: sound themes
+        const val SHARED_PREFS_SOUND_THEME_OVERRIDE = "SoundThemeOverride"
+        const val SHARED_PREFS_CATALOG_FORMAT = "CatalogFormat"
 
         private const val LAST_TOPICS_COUNT = 3
 

@@ -47,6 +47,13 @@ object CatalogSync {
     private const val ICON_RETRY_INTERVAL_MILLIS = 24 * 60 * 60 * 1000L
     private const val BACKFILL_ICON_DOWNLOADS = 20
 
+    /**
+     * Bumped whenever this client starts reading more of the catalog (2 = sound_theme and the cash/done/fail/ask
+     * classes). An ETag stored by an older build belongs to a catalog that build only half understood, so it is
+     * not sent after an update: the first sync gets a 200 and the new fields, instead of a 304 forever.
+     */
+    const val CATALOG_FORMAT = 2
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
     private val running = AtomicBoolean(false)
@@ -202,7 +209,8 @@ object CatalogSync {
             Log.d(TAG, "No access token for $baseUrl, skipping catalog sync")
             return@withLock
         }
-        when (val result = CatalogApi(context).fetch(baseUrl, user, repository.getCatalogEtag(baseUrl))) {
+        val etag = if (repository.getCatalogFormat() == CATALOG_FORMAT) repository.getCatalogEtag(baseUrl) else null
+        when (val result = CatalogApi(context).fetch(baseUrl, user, etag)) {
             is CatalogResult.NotModified -> {
                 Log.d(TAG, "Catalog not modified")
                 CatalogAuthPrompt.clear(context, repository)
@@ -243,6 +251,8 @@ object CatalogSync {
         val oldSyncTopic = repository.getCatalogSyncTopic(baseUrl)
         repository.setCatalogSyncTopic(baseUrl, catalog.syncTopic)
         repository.setCatalogHistoryDays(catalog.historyDays)
+        repository.setCatalogServerSoundTheme(catalog.soundTheme) // Before reconcileCatalogChannels below
+        repository.setCatalogFormat(CATALOG_FORMAT)
         // Only after the whole plan is applied: a failed add (or a crash) must not be hidden behind a 304
         repository.setCatalogEtag(baseUrl, if (allAdded) etag else null)
         repository.setCatalogLastSync(System.currentTimeMillis())
@@ -431,6 +441,7 @@ object CatalogSync {
         repository.setCatalogBaseUrl(null)
         repository.setCatalogEtag(baseUrl, null)
         repository.setCatalogSyncTopic(baseUrl, null)
+        repository.setCatalogServerSoundTheme(null) // The device's own choice (override) stays
         CatalogAuthPrompt.clear(context, repository)
         NotificationService(context).reconcileCatalogChannels(repository.getSubscriptions())
     }

@@ -33,6 +33,8 @@ import io.heckel.ntfy.backup.Backuper
 import io.heckel.ntfy.db.CustomHeader
 import io.heckel.ntfy.db.Repository
 import io.heckel.ntfy.db.User
+import io.heckel.ntfy.msg.CatalogTheme
+import io.heckel.ntfy.msg.NotificationService
 import io.heckel.ntfy.service.CatalogSync
 import io.heckel.ntfy.service.SubscriberServiceManager
 import io.heckel.ntfy.up.Distributor
@@ -161,6 +163,7 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
         private lateinit var repository: Repository
         private lateinit var serviceManager: SubscriberServiceManager
         private var autoDownloadSelection = AUTO_DOWNLOAD_SELECTION_NOT_SET
+        private var soundThemePreview: SoundThemePreview? = null // kudcrafts: sound themes
 
         // kudcrafts: catalog sign-in
 
@@ -178,6 +181,13 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
                 Toast.makeText(requireContext(), R.string.kc_settings_sync_now_toast, Toast.LENGTH_SHORT).show()
                 true
             }
+            findPreference<Preference>(getString(R.string.kc_settings_sound_theme_key))?.let { themePref ->
+                themePref.preferenceDataStore = object : PreferenceDataStore() { }
+                themePref.onPreferenceClickListener = OnPreferenceClickListener {
+                    onSoundThemeClick()
+                    true
+                }
+            }
             requireActivity().supportFragmentManager.setFragmentResultListener(CatalogLoginDialog.RESULT_KEY, this) { _, _ ->
                 refreshCatalogAccountPrefs()
             }
@@ -189,10 +199,16 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
             refreshCatalogAccountPrefs()
         }
 
+        override fun onPause() {
+            soundThemePreview?.stop() // kudcrafts: no preview playing on after the screen is left
+            super.onPause()
+        }
+
         private fun refreshCatalogAccountPrefs() {
             if (!this::repository.isInitialized) return
             val accountPref: Preference = findPreference(getString(R.string.kc_settings_account_key)) ?: return
             val syncPref: Preference = findPreference(getString(R.string.kc_settings_sync_now_key)) ?: return
+            refreshSoundThemePref()
             lifecycleScope.launch(Dispatchers.IO) {
                 val baseUrl = repository.getCatalogBaseUrl()
                 val user = baseUrl?.let { repository.getUser(it) }
@@ -213,6 +229,58 @@ class SettingsActivity : AppCompatActivity(), PreferenceFragmentCompat.OnPrefere
                     }
                 }
             }
+        }
+
+        // kudcrafts: sound themes. "Follow server" plus the ten bundled themes, kept per device
+
+        private fun serverSoundThemeLabel(): String {
+            return getString(R.string.kc_settings_sound_theme_follow_server, CatalogTheme.label(CatalogTheme.normalize(repository.getCatalogServerSoundTheme())))
+        }
+
+        private fun refreshSoundThemePref() {
+            val themePref: Preference = findPreference(getString(R.string.kc_settings_sound_theme_key)) ?: return
+            val override = repository.getSoundThemeOverride()?.takeIf { it in CatalogTheme.ALL }
+            themePref.summary = if (override == null) serverSoundThemeLabel() else CatalogTheme.label(override)
+        }
+
+        /** Tapping a row plays that theme's seven clips; nothing changes until "Use this theme" */
+        private fun onSoundThemeClick() {
+            val themes: List<String?> = listOf<String?>(null) + CatalogTheme.ALL // null = follow the server
+            val labels = themes.map { if (it == null) serverSoundThemeLabel() else CatalogTheme.label(it) }.toTypedArray()
+            val server = repository.getCatalogServerSoundTheme()
+            val override = repository.getSoundThemeOverride()?.takeIf { it in CatalogTheme.ALL }
+            var selected = themes.indexOf(override)
+            val context = requireContext()
+            val preview = SoundThemePreview(context).also { soundThemePreview = it }
+            val title = getString(R.string.kc_settings_sound_theme_title)
+            lateinit var dialog: androidx.appcompat.app.AlertDialog
+            dialog = MaterialAlertDialogBuilder(context)
+                .setTitle(title)
+                .setSingleChoiceItems(labels, selected) { _, which ->
+                    selected = which
+                    val theme = CatalogTheme.resolve(themes[which], server)
+                    preview.play(theme) { soundClass ->
+                        dialog.setTitle(
+                            if (soundClass == null) title
+                            else context.getString(R.string.kc_settings_sound_theme_playing, CatalogTheme.label(theme), NotificationService.catalogSoundLabel(context, soundClass))
+                        )
+                    }
+                }
+                .setPositiveButton(R.string.kc_settings_sound_theme_use) { _, _ ->
+                    val before = repository.getSoundTheme()
+                    repository.setSoundThemeOverride(themes[selected])
+                    refreshSoundThemePref()
+                    if (repository.getSoundTheme() != before) {
+                        // Channels cannot be edited: the old theme's are deleted, the new theme's created
+                        val app = context.applicationContext as io.heckel.ntfy.app.Application
+                        app.ioScope.launch {
+                            NotificationService(app).reconcileCatalogChannels(repository.getSubscriptions())
+                        }
+                    }
+                }
+                .setNegativeButton(R.string.kc_settings_account_dialog_cancel, null)
+                .setOnDismissListener { preview.stop() }
+                .show()
         }
 
         private fun onCatalogAccountClick() {

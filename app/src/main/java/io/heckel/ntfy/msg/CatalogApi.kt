@@ -147,13 +147,17 @@ sealed class CatalogResult {
     data class Failed(val message: String) : CatalogResult()
 }
 
-/** Normalized catalog. Every field is non-null; sounds are always one of [CatalogSound.ALL]. */
+/**
+ * Normalized catalog. Every field is non-null; sounds are always one of [CatalogSound.ALL] and the
+ * sound theme one of [CatalogTheme.ALL].
+ */
 data class Catalog(
     val version: Long,
     val baseUrl: String,
     val historyDays: Int,
     val syncTopic: String,
-    val apps: List<CatalogApp>
+    val apps: List<CatalogApp>,
+    val soundTheme: String = CatalogTheme.DEFAULT // Server-wide theme; an older server sends none
 )
 
 data class CatalogApp(
@@ -176,10 +180,42 @@ object CatalogSound {
     const val DEFAULT = "default"
     const val ALERT = "alert"
     const val URGENT = "urgent"
-    val ALL = listOf(SILENT, DEFAULT, ALERT, URGENT)
+    const val CASH = "cash" // Order paid
+    const val DONE = "done" // Job or agent finished
+    const val FAIL = "fail" // Build, deploy or job failed
+    const val ASK = "ask" // An agent needs an answer
+    val ALL = listOf(SILENT, DEFAULT, ALERT, URGENT, CASH, DONE, FAIL, ASK)
+
+    /** Classes that have a clip in every theme, in preview order. [SILENT] has none. */
+    val AUDIBLE = listOf(DEFAULT, ALERT, URGENT, CASH, DONE, FAIL, ASK)
 
     /** Anything unknown (a newer server, a typo) degrades to the platform default, never to silence. */
     fun normalize(sound: String?): String = if (sound in ALL) sound!! else DEFAULT
+}
+
+/**
+ * kudcrafts: sound themes. Every theme ships all [CatalogSound.AUDIBLE] clips as res/raw/kc_<theme>_<sound>.ogg.
+ * The theme in use is this device's override if set, else the server's, else [DEFAULT].
+ */
+object CatalogTheme {
+    const val DEFAULT = "cabin"
+    val ALL = listOf("wood", "glass", "soft", "chip", "pluck", "keys", "space", "cabin", "cockpit", "terminal")
+
+    /** Anything unknown (a newer server, an older one that sends no theme, a typo) degrades to [DEFAULT]. */
+    fun normalize(theme: String?): String = if (theme in ALL) theme!! else DEFAULT
+
+    /** [override] is this device's choice (null or unknown = follow the server), [server] is the catalog's sound_theme. */
+    fun resolve(override: String?, server: String?): String = if (override in ALL) override!! else normalize(server)
+
+    /** Resource name of a clip, or null for the silent class. Unknown theme -> cabin, unknown class -> default. */
+    fun clipName(theme: String?, sound: String?): String? {
+        val soundClass = CatalogSound.normalize(sound)
+        if (soundClass == CatalogSound.SILENT) return null
+        return "kc_${normalize(theme)}_$soundClass"
+    }
+
+    /** Display name: "cabin" -> "Cabin" */
+    fun label(theme: String): String = theme.replaceFirstChar { it.uppercase() }
 }
 
 private data class CatalogResponse(
@@ -187,6 +223,7 @@ private data class CatalogResponse(
     @SerializedName("base_url") val baseUrl: String?,
     @SerializedName("history_days") val historyDays: Int?,
     @SerializedName("sync_topic") val syncTopic: String?,
+    @SerializedName("sound_theme") val soundTheme: String?,
     @SerializedName("apps") val apps: List<CatalogAppResponse?>?
 ) {
     fun normalize(): Catalog = Catalog(
@@ -194,7 +231,8 @@ private data class CatalogResponse(
         baseUrl = baseUrl ?: "",
         historyDays = historyDays ?: 0,
         syncTopic = syncTopic ?: "",
-        apps = apps.orEmpty().filterNotNull().mapNotNull { it.normalize() }
+        apps = apps.orEmpty().filterNotNull().mapNotNull { it.normalize() },
+        soundTheme = CatalogTheme.normalize(soundTheme)
     )
 }
 

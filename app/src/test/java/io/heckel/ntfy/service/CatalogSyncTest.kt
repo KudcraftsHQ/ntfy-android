@@ -216,6 +216,28 @@ class CatalogSyncTest {
     }
 
     @Test
+    fun parsesSoundThemeAndNewSoundClasses() {
+        val json = """
+            { "version": 3, "sound_theme": "cockpit", "apps": [
+              { "id": "facemap", "sound": "cash", "topics": [
+                { "topic": "facemap-orders" }, { "topic": "facemap-deploys", "sound": "fail" },
+                { "topic": "facemap-agents", "sound": "ask" }, { "topic": "facemap-jobs", "sound": "done" } ] }
+            ] }
+        """.trimIndent()
+        val c = CatalogApi.parseCatalog(json)!!
+        assertEquals("cockpit", c.soundTheme)
+        assertEquals("cash", c.apps[0].sound)
+        assertEquals(listOf("cash", "fail", "ask", "done"), c.apps[0].topics.map { it.sound })
+    }
+
+    @Test
+    fun missingOrUnknownSoundThemeMeansCabin() {
+        assertEquals("cabin", CatalogApi.parseCatalog("""{ "version": 1, "apps": [] }""")!!.soundTheme) // Older server
+        assertEquals("cabin", CatalogApi.parseCatalog("""{ "version": 1, "sound_theme": "vaporwave", "apps": [] }""")!!.soundTheme)
+        assertEquals("cabin", CatalogApi.parseCatalog("""{ "version": 1, "sound_theme": null, "apps": [] }""")!!.soundTheme)
+    }
+
+    @Test
     fun parsingNormalizesMissingAndUnsafeFields() {
         val json = """
             { "version": 2, "apps": [
